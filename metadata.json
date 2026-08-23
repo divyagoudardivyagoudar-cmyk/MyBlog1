@@ -1,0 +1,6 @@
+{
+  "name": "MyBlog",
+  "description": "A cyber-tech futuristic blogging and graphics platform with 3D AI robot mascot, interactive services, metrics bar, and complete story publishing workflow.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

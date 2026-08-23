@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@keyframes float-slow {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(1deg);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.6;
+    filter: drop-shadow(0 0 15px rgba(6, 182, 212, 0.5));
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 25px rgba(6, 182, 212, 0.8));
+  }
+}
+
+@keyframes wave-hand {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(14deg);
+  }
+  75% {
+    transform: rotate(-10deg);
+  }
+}
+
+.animate-float {
+  animation: float-slow 4s ease-in-out infinite;
+}
+
+.animate-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+.animate-wave {
+  transform-origin: 70% 70%;
+  animation: wave-hand 2s ease-in-out infinite;
+}
+
+.cyber-glass {
+  background: rgba(8, 24, 48, 0.65);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(6, 182, 212, 0.25);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.cyber-glass-glow {
+  background: rgba(10, 30, 60, 0.75);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(34, 211, 238, 0.4);
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.2), inset 0 0 15px rgba(6, 182, 212, 0.1);
+}
+
+.cyber-badge {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.25) 0%, rgba(14, 165, 233, 0.1) 100%);
+  border: 1px solid rgba(34, 211, 238, 0.4);
+}
+
