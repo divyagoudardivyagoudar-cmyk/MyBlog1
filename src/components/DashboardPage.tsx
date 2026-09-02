@@ -23,7 +23,9 @@ import {
   ArrowRight,
   ArrowLeft,
   LogIn,
-  UserPlus
+  UserPlus,
+  RefreshCw,
+  Database
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -34,9 +36,12 @@ export const DashboardPage: React.FC = () => {
     navigateTo,
     deletePost,
     updateProfile,
-    showToast
+    showToast,
+    fetchBlogs,
+    isLoadingPosts
   } = useBlog();
 
+  const [scopeTab, setScopeTab] = useState<'my' | 'all'>('my');
   const [filterTab, setFilterTab] = useState<'all' | 'published' | 'draft'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [postToDelete, setPostToDelete] = useState<BlogPost | null>(null);
@@ -47,17 +52,18 @@ export const DashboardPage: React.FC = () => {
   const [editBio, setEditBio] = useState(currentUser?.bio || '');
   const [editAvatar, setEditAvatar] = useState(currentUser?.avatar || '');
 
-  // Filter posts created by current user
-  const userBlogs = useMemo(() => {
+  // Filter posts based on scope
+  const targetBlogs = useMemo(() => {
+    if (scopeTab === 'all') return posts;
     if (!currentUser) return [];
     return posts.filter(
       (p) => p.authorId === currentUser.id || p.authorName.toLowerCase() === currentUser.name.toLowerCase()
     );
-  }, [posts, currentUser]);
+  }, [posts, currentUser, scopeTab]);
 
-  // Derived filtered user blogs
+  // Derived filtered blogs
   const filteredUserBlogs = useMemo(() => {
-    let list = [...userBlogs];
+    let list = [...targetBlogs];
 
     if (filterTab === 'published') {
       list = list.filter((p) => p.status === 'published');
@@ -71,18 +77,19 @@ export const DashboardPage: React.FC = () => {
         (p) =>
           p.title.toLowerCase().includes(q) ||
           p.category.toLowerCase().includes(q) ||
-          p.description.toLowerCase().includes(q)
+          p.description.toLowerCase().includes(q) ||
+          p.authorName.toLowerCase().includes(q)
       );
     }
 
     return list;
-  }, [userBlogs, filterTab, searchQuery]);
+  }, [targetBlogs, filterTab, searchQuery]);
 
   // Stats calculation
-  const totalPublished = userBlogs.filter((p) => p.status === 'published').length;
-  const totalDrafts = userBlogs.filter((p) => p.status === 'draft').length;
-  const totalViews = userBlogs.reduce((acc, p) => acc + (p.viewsCount || 0), 0);
-  const totalLikes = userBlogs.reduce((acc, p) => acc + (p.likesCount || 0), 0);
+  const totalPublished = targetBlogs.filter((p) => p.status === 'published').length;
+  const totalDrafts = targetBlogs.filter((p) => p.status === 'draft').length;
+  const totalViews = targetBlogs.reduce((acc, p) => acc + (p.viewsCount || 0), 0);
+  const totalLikes = targetBlogs.reduce((acc, p) => acc + (p.likesCount || 0), 0);
 
   const handleDeleteConfirm = () => {
     if (postToDelete) {
@@ -207,7 +214,7 @@ export const DashboardPage: React.FC = () => {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-cyan-500/20 text-center">
           <div className="cyber-glass rounded-2xl p-3 border border-cyan-500/30">
             <span className="text-[11px] font-bold text-cyan-300/80 uppercase">Total Articles</span>
-            <p className="text-xl sm:text-2xl font-black text-white leading-tight mt-0.5">{userBlogs.length}</p>
+            <p className="text-xl sm:text-2xl font-black text-white leading-tight mt-0.5">{targetBlogs.length}</p>
           </div>
 
           <div className="cyber-glass rounded-2xl p-3 border border-emerald-500/30">
@@ -232,13 +239,49 @@ export const DashboardPage: React.FC = () => {
         
         {/* Controls Bar */}
         <div className="p-4 sm:px-6 border-b border-cyan-500/20 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <h2 className="text-base sm:text-lg font-black text-white tracking-wide uppercase">
-              MANAGE MY BLOGS
-            </h2>
-            <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-400/30">
-              {filteredUserBlogs.length}
-            </span>
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Scope Switcher: My Blogs vs All DB Blogs */}
+            <div className="flex items-center p-1 bg-cyan-950/90 rounded-xl border border-cyan-500/30 text-xs font-semibold">
+              <button
+                onClick={() => setScopeTab('my')}
+                className={`px-3 py-1 rounded-lg transition-colors flex items-center gap-1.5 ${
+                  scopeTab === 'my'
+                    ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
+                    : 'text-cyan-300 hover:text-white'
+                }`}
+                id="scope-my-blogs"
+              >
+                <UserIcon className="w-3.5 h-3.5" />
+                <span>My Articles</span>
+              </button>
+
+              <button
+                onClick={() => setScopeTab('all')}
+                className={`px-3 py-1 rounded-lg transition-colors flex items-center gap-1.5 ${
+                  scopeTab === 'all'
+                    ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
+                    : 'text-cyan-300 hover:text-white'
+                }`}
+                id="scope-all-db-blogs"
+              >
+                <Database className="w-3.5 h-3.5" />
+                <span>All Database Blogs ({posts.length})</span>
+              </button>
+            </div>
+
+            <button
+              onClick={async () => {
+                await fetchBlogs();
+                showToast('success', `Retrieved and synchronized ${posts.length} database blogs`);
+              }}
+              disabled={isLoadingPosts}
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-lg bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-500/30 transition-colors disabled:opacity-50 cursor-pointer"
+              title="Refresh database entries from MongoDB"
+              id="dashboard-sync-db-btn"
+            >
+              <RefreshCw className={`w-3 h-3 text-cyan-400 ${isLoadingPosts ? 'animate-spin' : ''}`} />
+              <span>{isLoadingPosts ? 'Syncing...' : 'Sync DB'}</span>
+            </button>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -247,7 +290,7 @@ export const DashboardPage: React.FC = () => {
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-cyan-400" />
               <input
                 type="text"
-                placeholder="Search my posts..."
+                placeholder={scopeTab === 'all' ? 'Search all database blogs...' : 'Search my posts...'}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-8 pr-3 py-1.5 text-xs bg-cyan-950/70 text-white rounded-xl border border-cyan-500/30 focus:border-cyan-400 focus:outline-none placeholder:text-cyan-400/40"
@@ -297,10 +340,10 @@ export const DashboardPage: React.FC = () => {
               </div>
               <div className="space-y-1">
                 <h3 className="text-base font-bold text-white uppercase">
-                  {userBlogs.length === 0 ? 'No Articles Created Yet' : 'No Matching Articles Found'}
+                  {targetBlogs.length === 0 ? 'No Articles Found' : 'No Matching Articles Found'}
                 </h3>
                 <p className="text-xs text-cyan-200/70 max-w-sm mx-auto">
-                  {userBlogs.length === 0
+                  {targetBlogs.length === 0
                     ? 'Start drafting your first blog post right now using the live markdown editor!'
                     : 'Try changing your search query or switching tabs.'}
                 </p>

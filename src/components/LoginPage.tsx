@@ -59,37 +59,46 @@ export const LoginPage: React.FC = () => {
     return true;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
 
     setIsLoading(true);
-    setTimeout(() => {
-      const res = login(identifier, password);
-      setIsLoading(false);
+    setError(null);
+    try {
+      const res = await login(identifier.trim(), password);
       if (res.success) {
         navigateTo('dashboard');
       } else {
-        setError(res.message);
+        setError(res.message || 'Login failed. Please check your credentials.');
       }
-    }, 400);
+    } catch (err: any) {
+      setError(err?.message || 'An unexpected error occurred during login.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleQuickLogin = (email: string) => {
+  const handleQuickLogin = async (email: string) => {
     setIdentifier(email);
     setPassword('password123');
     setError(null);
     setIsLoading(true);
-    setTimeout(() => {
-      const res = login(email, 'password123');
-      setIsLoading(false);
+    try {
+      const res = await login(email, 'password123');
       if (res.success) {
         navigateTo('dashboard');
+      } else {
+        setError(res.message || 'Quick login failed.');
       }
-    }, 300);
+    } catch (err: any) {
+      setError(err?.message || 'Quick login encountered an error.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleResetPasswordSubmit = (e: React.FormEvent) => {
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setForgotMsg(null);
     if (!forgotEmail.trim() || !forgotEmail.includes('@')) {
@@ -101,16 +110,20 @@ export const LoginPage: React.FC = () => {
       return;
     }
 
-    const res = resetPassword(forgotEmail, newPassword);
-    if (res.success) {
-      setForgotMsg({ type: 'success', text: res.message });
-      setTimeout(() => {
-        setShowForgotModal(false);
-        setIdentifier(forgotEmail);
-        setPassword(newPassword);
-      }, 1500);
-    } else {
-      setForgotMsg({ type: 'error', text: res.message });
+    try {
+      const res = await resetPassword(forgotEmail.trim(), newPassword);
+      if (res.success) {
+        setForgotMsg({ type: 'success', text: res.message });
+        setTimeout(() => {
+          setShowForgotModal(false);
+          setIdentifier(forgotEmail);
+          setPassword(newPassword);
+        }, 1500);
+      } else {
+        setForgotMsg({ type: 'error', text: res.message });
+      }
+    } catch (err: any) {
+      setForgotMsg({ type: 'error', text: err?.message || 'Failed to reset password.' });
     }
   };
 

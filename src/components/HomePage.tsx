@@ -33,7 +33,9 @@ import {
   Zap,
   Tag,
   LogIn,
-  LayoutDashboard
+  LayoutDashboard,
+  RefreshCw,
+  Database
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -46,7 +48,11 @@ export const HomePage: React.FC = () => {
     setSearchQuery,
     selectedCategory,
     setSelectedCategory,
-    likePost
+    likePost,
+    fetchBlogs,
+    isLoadingPosts,
+    serverConnected,
+    showToast
   } = useBlog();
 
   const [sortBy, setSortBy] = useState<'latest' | 'popular' | 'views'>('latest');
@@ -523,20 +529,39 @@ export const HomePage: React.FC = () => {
               </p>
             </div>
 
-            {/* Sort Dropdown */}
-            <div className="flex items-center gap-2 self-start md:self-auto text-xs text-cyan-200">
-              <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="text-cyan-300 font-medium">Sort By:</span>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-                className="bg-cyan-950 border border-cyan-500/40 rounded-lg px-2.5 py-1.5 text-xs text-white font-semibold focus:outline-none focus:border-cyan-400"
-                id="blog-sort-select"
+            {/* Controls: DB Sync & Sort Dropdown */}
+            <div className="flex flex-wrap items-center gap-3 self-start md:self-auto text-xs">
+              <button
+                onClick={async () => {
+                  await fetchBlogs();
+                  showToast('success', `Retrieved ${posts.length} blogs from database`);
+                }}
+                disabled={isLoadingPosts}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-950/90 hover:bg-cyan-900 text-cyan-300 border border-cyan-500/40 hover:border-cyan-400 font-semibold transition-all disabled:opacity-50 cursor-pointer group"
+                id="sync-database-blogs-btn"
+                title="Fetch & refresh all blogs from MongoDB database"
               >
-                <option value="latest">Latest First</option>
-                <option value="popular">Most Liked</option>
-                <option value="views">Most Viewed</option>
-              </select>
+                <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isLoadingPosts ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
+                <span>{isLoadingPosts ? 'Fetching...' : 'Sync DB'}</span>
+                <span className="text-[10px] px-1.5 py-0.2 bg-cyan-500/20 text-cyan-300 rounded font-mono">
+                  {posts.length}
+                </span>
+              </button>
+
+              <div className="flex items-center gap-2 text-cyan-200">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="text-cyan-300 font-medium">Sort:</span>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="bg-cyan-950 border border-cyan-500/40 rounded-lg px-2.5 py-1.5 text-xs text-white font-semibold focus:outline-none focus:border-cyan-400"
+                  id="blog-sort-select"
+                >
+                  <option value="latest">Latest First</option>
+                  <option value="popular">Most Liked</option>
+                  <option value="views">Most Viewed</option>
+                </select>
+              </div>
             </div>
           </div>
 

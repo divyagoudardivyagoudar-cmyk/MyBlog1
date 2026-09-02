@@ -93,20 +93,24 @@ export const RegisterPage: React.FC = () => {
     return true;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
 
     setIsLoading(true);
-    setTimeout(() => {
-      const res = register(fullName, email, username, password);
-      setIsLoading(false);
+    setError(null);
+    try {
+      const res = await register(fullName.trim(), email.trim(), username.trim(), password);
       if (res.success) {
         navigateTo('dashboard');
       } else {
-        setError(res.message);
+        setError(res.message || 'Registration failed.');
       }
-    }, 350);
+    } catch (err: any) {
+      setError(err?.message || 'An error occurred during registration.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

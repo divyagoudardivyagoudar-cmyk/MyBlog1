@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { BlogPost, Comment, ToastMessage, User, ActivePage } from '../types';
 import { INITIAL_BLOGS, INITIAL_USERS } from '../data/initialData';
-import { api, setAuthToken } from '../services/api';
+import { api, setAuthToken, setApiToastHandler } from '../services/api';
 
 interface BlogContextType {
   currentUser: User | null;
@@ -13,6 +13,8 @@ interface BlogContextType {
   selectedCategory: string;
   toasts: ToastMessage[];
   serverConnected: boolean;
+  isLoadingPosts: boolean;
+  fetchBlogs: () => Promise<void>;
   navigateTo: (page: ActivePage, post?: BlogPost | null) => void;
   setSearchQuery: (query: string) => void;
   setSelectedCategory: (cat: string) => void;
@@ -81,6 +83,7 @@ export const BlogProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [serverConnected, setServerConnected] = useState<boolean>(true);
+  const [isLoadingPosts, setIsLoadingPosts] = useState<boolean>(false);
 
   // Sync to localStorage
   useEffect(() => {
@@ -99,24 +102,36 @@ export const BlogProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [currentUser]);
 
+  // Retrieve and sync all blogs from backend / MongoDB database
+  const fetchBlogs = async () => {
+    setIsLoadingPosts(true);
+    try {
+      const blogRes = await api.getBlogs();
+      if (blogRes && blogRes.blogs && Array.isArray(blogRes.blogs)) {
+        setPosts(blogRes.blogs);
+        setServerConnected(true);
+      }
+    } catch (err) {
+      console.warn('Backend database fetching / fallback mode:', err);
+    } finally {
+      setIsLoadingPosts(false);
+    }
+  };
+
   // Initial load from backend server
   useEffect(() => {
-    const checkServer = async () => {
+    const initData = async () => {
       try {
         const health = await api.checkHealth();
-        if (health && health.status === 'ok') {
+        if (health && (health.status === 'ok' || health.status === 'healthy')) {
           setServerConnected(true);
-          // Fetch blogs from backend
-          const blogRes = await api.getBlogs();
-          if (blogRes && blogRes.blogs && blogRes.blogs.length > 0) {
-            setPosts(blogRes.blogs);
-          }
         }
       } catch (err) {
-        console.warn('Backend server connecting / standalone fallback mode:', err);
+        console.warn('Health check note:', err);
       }
+      await fetchBlogs();
     };
-    checkServer();
+    initData();
   }, []);
 
   const showToast = (type: 'success' | 'error' | 'info', message: string) => {
@@ -126,6 +141,24 @@ export const BlogProvider: React.FC<{ children: React.ReactNode }> = ({ children
       removeToast(id);
     }, 4000);
   };
+
+  // Register Toast handler with Axios API service for global interceptors
+  useEffect(() => {
+    setApiToastHandler(showToast);
+
+    const handleCustomToast = (event: Event) => {
+      const customEvent = event as CustomEvent<{ type: 'success' | 'error' | 'info'; message: string }>;
+      if (customEvent.detail) {
+        showToast(customEvent.detail.type || 'error', customEvent.detail.message);
+      }
+    };
+
+    window.addEventListener('blog:toast', handleCustomToast);
+    return () => {
+      setApiToastHandler(null);
+      window.removeEventListener('blog:toast', handleCustomToast);
+    };
+  }, []);
 
   const removeToast = (id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -288,6 +321,8 @@ export const BlogProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setPosts((prev) => [createdPost, ...prev]);
     showToast('success', createdPost.status === 'published' ? '🎉 Blog published successfully!' : '💾 Blog saved as draft!');
+    // Re-sync with backend to get latest database IDs and state
+    fetchBlogs();
     return createdPost;
   };
 
@@ -317,6 +352,7 @@ export const BlogProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
     );
     showToast('success', 'Blog updated successfully!');
+    fetchBlogs();
   };
 
   const deletePost = async (id: string) => {
@@ -327,6 +363,7 @@ export const BlogProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     setPosts((prev) => prev.filter((p) => p.id !== id));
     showToast('info', 'Blog post has been deleted.');
+    fetchBlogs();
   };
 
   const likePost = async (id: string) => {
@@ -411,6 +448,8 @@ export const BlogProvider: React.FC<{ children: React.ReactNode }> = ({ children
         selectedCategory,
         toasts,
         serverConnected,
+        isLoadingPosts,
+        fetchBlogs,
         navigateTo,
         setSearchQuery,
         setSelectedCategory,

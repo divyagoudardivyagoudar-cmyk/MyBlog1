@@ -106,7 +106,7 @@ export const CreateEditBlogPage: React.FC<CreateEditBlogPageProps> = ({ editPost
     return true;
   };
 
-  const handleSave = (status: 'published' | 'draft') => {
+  const handleSave = async (status: 'published' | 'draft') => {
     if (!validateForm()) return;
 
     const finalCategory = category === 'custom' ? customCategory.trim() : category;
@@ -133,7 +133,7 @@ export const CreateEditBlogPage: React.FC<CreateEditBlogPageProps> = ({ editPost
     const authorId = currentUser ? currentUser.id : 'user_guest';
 
     if (isEditing && editPost) {
-      updatePost(editPost.id, {
+      await updatePost(editPost.id, {
         title: title.trim(),
         authorName: authorName.trim(),
         category: finalCategory,
@@ -149,7 +149,7 @@ export const CreateEditBlogPage: React.FC<CreateEditBlogPageProps> = ({ editPost
         navigateTo('home');
       }
     } else {
-      createPost({
+      await createPost({
         title: title.trim(),
         authorId,
         authorName: authorName.trim(),
