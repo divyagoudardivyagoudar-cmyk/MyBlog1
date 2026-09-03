@@ -35,7 +35,8 @@ import {
   LogIn,
   LayoutDashboard,
   RefreshCw,
-  Database
+  Database,
+  X
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -62,6 +63,55 @@ export const HomePage: React.FC = () => {
   const publishedPosts = useMemo(() => {
     return posts.filter((p) => p.status === 'published');
   }, [posts]);
+
+  // Dynamically compute all available categories from published posts + presets
+  const allCategories = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; count: number }>();
+
+    // Seed presets
+    INITIAL_CATEGORIES.forEach((cat) => {
+      map.set(cat.name.toLowerCase(), {
+        id: cat.id,
+        name: cat.name,
+        count: 0,
+      });
+    });
+
+    // Tally actual published posts and append any custom categories
+    publishedPosts.forEach((p) => {
+      const name = p.category?.trim() || 'General';
+      const key = name.toLowerCase();
+      const existing = map.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        map.set(key, {
+          id: key.replace(/[^a-z0-9]/g, '-'),
+          name,
+          count: 1,
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  }, [publishedPosts]);
+
+  // Extract top popular tags for instant chip click filtering
+  const popularTags = useMemo(() => {
+    const map = new Map<string, number>();
+    publishedPosts.forEach((p) => {
+      p.tags?.forEach((t) => {
+        const clean = t.trim().replace(/^#/, '');
+        if (clean) {
+          map.set(clean, (map.get(clean) || 0) + 1);
+        }
+      });
+    });
+    return Array.from(map.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([tag]) => tag);
+  }, [publishedPosts]);
 
   // Apply search, category filter, and sorting
   const filteredPosts = useMemo(() => {
@@ -529,7 +579,7 @@ export const HomePage: React.FC = () => {
               </p>
             </div>
 
-            {/* Controls: DB Sync & Sort Dropdown */}
+            {/* Quick Actions: DB Sync & Sort Dropdown */}
             <div className="flex flex-wrap items-center gap-3 self-start md:self-auto text-xs">
               <button
                 onClick={async () => {
@@ -554,7 +604,7 @@ export const HomePage: React.FC = () => {
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as any)}
-                  className="bg-cyan-950 border border-cyan-500/40 rounded-lg px-2.5 py-1.5 text-xs text-white font-semibold focus:outline-none focus:border-cyan-400"
+                  className="bg-cyan-950 border border-cyan-500/40 rounded-lg px-2.5 py-1.5 text-xs text-white font-semibold focus:outline-none focus:border-cyan-400 cursor-pointer"
                   id="blog-sort-select"
                 >
                   <option value="latest">Latest First</option>
@@ -565,11 +615,94 @@ export const HomePage: React.FC = () => {
             </div>
           </div>
 
-          {/* Category Filter Pills Bar */}
-          <div className="cyber-glass rounded-xl p-2 sm:p-2.5 flex items-center gap-2 overflow-x-auto scrollbar-none border border-cyan-500/20">
+          {/* SEARCH BLOGS & FILTER CONTROL HUB */}
+          <div className="cyber-glass-glow rounded-2xl p-3 sm:p-4 border border-cyan-500/30 space-y-3" id="articles-search-filter-hub">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              {/* Main Search Input */}
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-cyan-400" />
+                <input
+                  type="text"
+                  placeholder="Search blogs by title, keywords, topic, author, or tags..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-10 py-2.5 text-xs sm:text-sm bg-cyan-950/80 text-white rounded-xl border border-cyan-500/40 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 focus:outline-none placeholder:text-cyan-200/40 shadow-inner"
+                  id="articles-search-input"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-cyan-400 hover:text-white p-1 rounded-md transition-colors cursor-pointer"
+                    title="Clear search query"
+                    id="articles-clear-search-btn"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Category Dropdown (Compact Selector) */}
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="relative w-full sm:w-auto">
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="w-full sm:w-auto bg-cyan-950 text-cyan-200 font-semibold border border-cyan-500/40 rounded-xl px-3 py-2.5 text-xs sm:text-sm focus:border-cyan-400 focus:outline-none cursor-pointer"
+                    id="articles-category-select"
+                    title="Filter by blog category"
+                  >
+                    <option value="all">All Categories ({publishedPosts.length})</option>
+                    {allCategories.map((cat) => (
+                      <option key={cat.id} value={cat.name}>
+                        {cat.name} ({cat.count})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Popular Topics / Tag Chips */}
+            {popularTags.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-cyan-500/15">
+                <span className="text-[11px] font-bold text-cyan-300/70 uppercase tracking-wider flex items-center gap-1 mr-1">
+                  <Tag className="w-3 h-3 text-cyan-400" />
+                  Popular:
+                </span>
+                {popularTags.map((tag) => {
+                  const isTagActive = searchQuery.toLowerCase() === tag.toLowerCase();
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => {
+                        if (isTagActive) {
+                          setSearchQuery('');
+                        } else {
+                          setSearchQuery(tag);
+                        }
+                      }}
+                      className={`text-[11px] px-2.5 py-0.5 rounded-md font-mono transition-all cursor-pointer ${
+                        isTagActive
+                          ? 'bg-cyan-400 text-slate-950 font-bold shadow-[0_0_10px_rgba(34,211,238,0.5)]'
+                          : 'bg-cyan-950/60 hover:bg-cyan-900/80 text-cyan-200 border border-cyan-500/30'
+                      }`}
+                      id={`tag-chip-${tag}`}
+                    >
+                      #{tag}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Category Filter Horizontal Pills Bar */}
+          <div className="cyber-glass rounded-xl p-2 sm:p-2.5 flex items-center gap-2 overflow-x-auto scrollbar-none border border-cyan-500/20" id="category-pills-bar">
             <button
               onClick={() => setSelectedCategory('all')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
                 selectedCategory === 'all'
                   ? 'bg-cyan-500 text-slate-950 font-bold shadow-[0_0_12px_rgba(6,182,212,0.6)]'
                   : 'bg-cyan-950/60 text-cyan-200 hover:bg-cyan-900/60 hover:text-white border border-cyan-500/20'
@@ -580,15 +713,14 @@ export const HomePage: React.FC = () => {
               <span>All Topics ({publishedPosts.length})</span>
             </button>
 
-            {INITIAL_CATEGORIES.map((cat) => {
-              const count = publishedPosts.filter((p) => p.category.toLowerCase() === cat.name.toLowerCase()).length;
+            {allCategories.map((cat) => {
               const isSelected = selectedCategory.toLowerCase() === cat.name.toLowerCase();
 
               return (
                 <button
                   key={cat.id}
                   onClick={() => setSelectedCategory(cat.name)}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
                     isSelected
                       ? 'bg-cyan-500 text-slate-950 font-bold shadow-[0_0_12px_rgba(6,182,212,0.6)]'
                       : 'bg-cyan-950/60 text-cyan-200 hover:bg-cyan-900/60 hover:text-white border border-cyan-500/20'
@@ -596,8 +728,8 @@ export const HomePage: React.FC = () => {
                   id={`cat-pill-${cat.id}`}
                 >
                   <span>{cat.name}</span>
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-slate-950 text-cyan-300' : 'bg-cyan-900 text-cyan-300'}`}>
-                    {count}
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-slate-950 text-cyan-300 font-bold' : 'bg-cyan-900 text-cyan-300'}`}>
+                    {cat.count}
                   </span>
                 </button>
               );
@@ -606,21 +738,52 @@ export const HomePage: React.FC = () => {
 
           {/* Active Filter Notice */}
           {(searchQuery || selectedCategory !== 'all') && (
-            <div className="flex items-center justify-between cyber-glass rounded-lg px-3 py-2 text-xs text-cyan-200 border border-cyan-500/30">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 cyber-glass rounded-xl px-3.5 py-2.5 text-xs text-cyan-200 border border-cyan-500/30">
+              <div className="flex flex-wrap items-center gap-2">
                 <Filter className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                 <span>
-                  Showing {filteredPosts.length} results {selectedCategory !== 'all' && <b>in "{selectedCategory}"</b>} {searchQuery && <span>matching <b>"{searchQuery}"</b></span>}
+                  Found <b className="text-white font-bold">{filteredPosts.length}</b> {filteredPosts.length === 1 ? 'article' : 'articles'}
                 </span>
+
+                {selectedCategory !== 'all' && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 text-[11px] font-semibold">
+                    Category: {selectedCategory}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCategory('all')}
+                      className="text-cyan-400 hover:text-white cursor-pointer ml-0.5"
+                      title="Clear category filter"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                )}
+
+                {searchQuery && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 text-[11px] font-semibold">
+                    Keyword: "{searchQuery}"
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="text-cyan-400 hover:text-white cursor-pointer ml-0.5"
+                      title="Clear keyword search"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                )}
               </div>
+
               <button
+                type="button"
                 onClick={() => {
                   setSearchQuery('');
                   setSelectedCategory('all');
                 }}
-                className="text-xs font-semibold text-cyan-400 hover:text-white underline ml-3 shrink-0"
+                className="text-xs font-bold text-cyan-400 hover:text-white underline cursor-pointer"
+                id="clear-all-filters-btn"
               >
-                Clear Filters
+                Clear All Filters
               </button>
             </div>
           )}
@@ -722,23 +885,54 @@ export const HomePage: React.FC = () => {
 
           {/* Empty State */}
           {filteredPosts.length === 0 && (
-            <div className="cyber-glass rounded-3xl p-10 text-center max-w-md mx-auto space-y-3 border border-cyan-500/20 my-6">
-              <div className="w-12 h-12 rounded-2xl bg-cyan-500/20 text-cyan-300 flex items-center justify-center mx-auto border border-cyan-400/30">
-                <Search className="w-6 h-6" />
+            <div className="cyber-glass-glow rounded-3xl p-8 sm:p-12 text-center max-w-lg mx-auto space-y-4 border border-cyan-500/30 my-8 shadow-xl">
+              <div className="w-16 h-16 rounded-2xl bg-cyan-500/20 text-cyan-300 flex items-center justify-center mx-auto border border-cyan-400/30 shadow-[0_0_20px_rgba(6,182,212,0.3)]">
+                <Search className="w-8 h-8 text-cyan-400" />
               </div>
-              <h4 className="text-base font-bold text-white">No articles found</h4>
-              <p className="text-xs text-cyan-200/70">
-                We couldn't find any articles matching your search criteria or category filter.
-              </p>
-              <button
-                onClick={() => {
-                  setSearchQuery('');
-                  setSelectedCategory('all');
-                }}
-                className="px-4 py-2 bg-cyan-500 text-slate-950 rounded-lg text-xs font-bold hover:bg-cyan-400 transition-colors"
-              >
-                Reset Search Filters
-              </button>
+              <div className="space-y-1">
+                <h4 className="text-lg font-black text-white uppercase tracking-wide">
+                  No Matching Articles Found
+                </h4>
+                <p className="text-xs sm:text-sm text-cyan-200/70 leading-relaxed">
+                  {searchQuery && selectedCategory !== 'all' ? (
+                    <>
+                      No blogs found matching <b className="text-cyan-300 font-bold">"{searchQuery}"</b> in category <b className="text-cyan-300 font-bold">"{selectedCategory}"</b>.
+                    </>
+                  ) : searchQuery ? (
+                    <>
+                      No articles found containing keyword <b className="text-cyan-300 font-bold">"{searchQuery}"</b>. Try broader terms or check the spelling.
+                    </>
+                  ) : (
+                    <>
+                      There are currently no published articles in category <b className="text-cyan-300 font-bold">"{selectedCategory}"</b>.
+                    </>
+                  )}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setSelectedCategory('all');
+                  }}
+                  className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 rounded-xl text-xs font-bold transition-all shadow-md shadow-cyan-500/20 cursor-pointer"
+                  id="empty-state-reset-filters-btn"
+                >
+                  Reset All Filters
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => navigateTo('create')}
+                  className="px-4 py-2 bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-500/40 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+                  id="empty-state-write-btn"
+                >
+                  <PenSquare className="w-3.5 h-3.5" />
+                  <span>Write an Article</span>
+                </button>
+              </div>
             </div>
           )}
 

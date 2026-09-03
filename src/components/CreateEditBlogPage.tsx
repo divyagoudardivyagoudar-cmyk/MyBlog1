@@ -57,6 +57,7 @@ export const CreateEditBlogPage: React.FC<CreateEditBlogPageProps> = ({ editPost
   const [previewMode, setPreviewMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showImagePicker, setShowImagePicker] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Synchronize author name if currentUser loads
   useEffect(() => {
@@ -108,64 +109,70 @@ export const CreateEditBlogPage: React.FC<CreateEditBlogPageProps> = ({ editPost
 
   const handleSave = async (status: 'published' | 'draft') => {
     if (!validateForm()) return;
+    setIsSaving(true);
 
-    const finalCategory = category === 'custom' ? customCategory.trim() : category;
-    const tags = tagsInput
-      .split(',')
-      .map((t) => t.trim().replace(/^#/, ''))
-      .filter(Boolean);
+    try {
+      const finalCategory = category === 'custom' ? customCategory.trim() : category;
+      const tags = tagsInput
+        .split(',')
+        .map((t) => t.trim().replace(/^#/, ''))
+        .filter(Boolean);
 
-    // Auto-generate short description if omitted
-    const finalDescription =
-      description.trim() ||
-      content
-        .replace(/[#*`_\[\]]/g, '')
-        .split('\n')
-        .find((l) => l.trim().length > 20)
-        ?.slice(0, 160) + '...' ||
-      'A new blog article on MyBlog.';
+      // Auto-generate short description if omitted
+      const finalDescription =
+        description.trim() ||
+        content
+          .replace(/[#*`_\[\]]/g, '')
+          .split('\n')
+          .find((l) => l.trim().length > 20)
+          ?.slice(0, 160) + '...' ||
+        'A new blog article on MyBlog.';
 
-    const authorAvatar =
-      currentUser && currentUser.name === authorName
-        ? currentUser.avatar
-        : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(authorName)}`;
+      const authorAvatar =
+        currentUser && currentUser.name === authorName
+          ? currentUser.avatar
+          : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(authorName)}`;
 
-    const authorId = currentUser ? currentUser.id : 'user_guest';
+      const authorId = currentUser ? currentUser.id : 'user_guest';
 
-    if (isEditing && editPost) {
-      await updatePost(editPost.id, {
-        title: title.trim(),
-        authorName: authorName.trim(),
-        category: finalCategory,
-        description: finalDescription,
-        content: content.trim(),
-        coverImage: coverImage.trim(),
-        tags,
-        status,
-      });
-      if (currentUser) {
-        navigateTo('dashboard');
+      if (isEditing && editPost) {
+        const updatePayload = {
+          title: title.trim(),
+          authorName: authorName.trim(),
+          category: finalCategory,
+          description: finalDescription,
+          content: content.trim(),
+          coverImage: coverImage.trim(),
+          tags,
+          status,
+        };
+        await updatePost(editPost.id, updatePayload);
+        navigateTo('read', { ...editPost, ...updatePayload });
       } else {
-        navigateTo('home');
+        const created = await createPost({
+          title: title.trim(),
+          authorId,
+          authorName: authorName.trim(),
+          authorAvatar,
+          category: finalCategory,
+          description: finalDescription,
+          content: content.trim(),
+          coverImage: coverImage.trim(),
+          tags,
+          status,
+        });
+        if (status === 'published' && created) {
+          navigateTo('read', created);
+        } else if (currentUser) {
+          navigateTo('dashboard');
+        } else {
+          navigateTo('home');
+        }
       }
-    } else {
-      await createPost({
-        title: title.trim(),
-        authorId,
-        authorName: authorName.trim(),
-        authorAvatar,
-        category: finalCategory,
-        description: finalDescription,
-        content: content.trim(),
-        coverImage: coverImage.trim(),
-        tags,
-        status,
-      });
-      if (currentUser) {
-        navigateTo('dashboard');
-      } else {
-        navigateTo('home');
-      }
+    } catch (err: any) {
+      setError(err?.message || 'Failed to save blog post.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -195,7 +202,8 @@ export const CreateEditBlogPage: React.FC<CreateEditBlogPageProps> = ({ editPost
           <button
             type="button"
             onClick={() => currentUser ? navigateTo('dashboard') : navigateTo('home')}
-            className="px-3.5 py-2 text-xs font-semibold text-cyan-300 hover:bg-cyan-950/80 rounded-xl transition-colors"
+            disabled={isSaving}
+            className="px-3.5 py-2 text-xs font-semibold text-cyan-300 hover:bg-cyan-950/80 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
             id="cancel-blog-btn"
           >
             Cancel
@@ -204,21 +212,23 @@ export const CreateEditBlogPage: React.FC<CreateEditBlogPageProps> = ({ editPost
           <button
             type="button"
             onClick={() => handleSave('draft')}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-950/80 hover:bg-amber-900/90 text-amber-200 border border-amber-500/40 font-bold rounded-xl text-xs transition-colors"
+            disabled={isSaving}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-950/80 hover:bg-amber-900/90 text-amber-200 border border-amber-500/40 font-bold rounded-xl text-xs transition-colors cursor-pointer disabled:opacity-50"
             id="save-draft-btn"
           >
             <Save className="w-3.5 h-3.5 text-amber-400" />
-            <span>Save Draft</span>
+            <span>{isSaving ? 'Saving...' : isEditing ? 'Save as Draft' : 'Save Draft'}</span>
           </button>
 
           <button
             type="button"
             onClick={() => handleSave('published')}
-            className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black rounded-xl text-xs shadow-[0_0_15px_rgba(6,182,212,0.4)] transition-all hover:scale-105 active:scale-95"
+            disabled={isSaving}
+            className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black rounded-xl text-xs shadow-[0_0_15px_rgba(6,182,212,0.4)] transition-all hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50"
             id="publish-blog-btn"
           >
             <Send className="w-3.5 h-3.5" />
-            <span>{isEditing ? 'Update & Publish' : 'Publish Blog'}</span>
+            <span>{isSaving ? 'Processing...' : isEditing ? 'Save Changes' : 'Publish Blog'}</span>
           </button>
         </div>
       </div>

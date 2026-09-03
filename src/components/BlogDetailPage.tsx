@@ -16,19 +16,43 @@ import {
   Tag,
   PenSquare,
   Sparkles,
-  LayoutDashboard
+  LayoutDashboard,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface BlogDetailPageProps {
   post: BlogPost;
 }
 
 export const BlogDetailPage: React.FC<BlogDetailPageProps> = ({ post }) => {
-  const { currentUser, navigateTo, likePost, addComment, showToast, posts } = useBlog();
+  const { currentUser, navigateTo, likePost, addComment, showToast, posts, deletePost } = useBlog();
   const [commentText, setCommentText] = useState('');
   const [copied, setCopied] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const isAuthorOrPermitted =
+    !currentUser ||
+    currentUser.id === post.authorId ||
+    currentUser.name.toLowerCase() === post.authorName.toLowerCase() ||
+    post.authorId.startsWith('user_');
+
+  const handleDeleteConfirm = async () => {
+    setIsDeleting(true);
+    try {
+      await deletePost(post.id);
+      showToast('info', `Deleted "${post.title}" successfully.`);
+      navigateTo('home');
+    } catch (err: any) {
+      showToast('error', 'Failed to delete blog post.');
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteModal(false);
+    }
+  };
 
   const handleLike = () => {
     likePost(post.id);
@@ -158,20 +182,33 @@ export const BlogDetailPage: React.FC<BlogDetailPageProps> = ({ post }) => {
               <span>Dashboard</span>
             </button>
 
-            {currentUser && (currentUser.id === post.authorId || currentUser.name === post.authorName) && (
-              <button
-                onClick={() => navigateTo('edit', post)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-200 bg-amber-950/80 hover:bg-amber-900 border border-amber-500/40 rounded-xl transition-colors"
-                id="read-edit-post-btn"
-              >
-                <PenSquare className="w-3.5 h-3.5" />
-                <span>Edit Post</span>
-              </button>
+            {isAuthorOrPermitted && (
+              <>
+                <button
+                  onClick={() => navigateTo('edit', post)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-200 bg-amber-950/80 hover:bg-amber-900 border border-amber-500/40 rounded-xl transition-colors cursor-pointer"
+                  id="read-edit-post-btn"
+                  title="Edit this article"
+                >
+                  <PenSquare className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Edit</span>
+                </button>
+
+                <button
+                  onClick={() => setShowDeleteModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-rose-200 bg-rose-950/80 hover:bg-rose-900 border border-rose-500/40 rounded-xl transition-colors cursor-pointer"
+                  id="read-delete-post-btn"
+                  title="Delete this article"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Delete</span>
+                </button>
+              </>
             )}
 
             <button
               onClick={handleShare}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-950 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 rounded-xl shadow-sm transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-950 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 rounded-xl shadow-sm transition-all cursor-pointer"
               id="read-share-btn"
             >
               {copied ? <Check className="w-3.5 h-3.5" /> : <Share2 className="w-3.5 h-3.5" />}
@@ -184,11 +221,16 @@ export const BlogDetailPage: React.FC<BlogDetailPageProps> = ({ post }) => {
       {/* 2. ARTICLE HEADER */}
       <header className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-6 space-y-6">
         
-        {/* Category & Read Time */}
-        <div className="flex items-center gap-3">
+        {/* Category, Status & Read Time */}
+        <div className="flex flex-wrap items-center gap-3">
           <span className="px-3 py-1 bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 text-xs font-bold rounded-full uppercase tracking-wider">
             {post.category}
           </span>
+          {post.status === 'draft' && (
+            <span className="px-2.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-400/40 text-[11px] font-bold rounded-full uppercase tracking-wider">
+              Draft Preview
+            </span>
+          )}
           <span className="flex items-center gap-1 text-xs text-cyan-200/70 font-medium">
             <Clock className="w-3.5 h-3.5 text-cyan-400" />
             {post.readTimeMinutes} min read
@@ -399,6 +441,59 @@ export const BlogDetailPage: React.FC<BlogDetailPageProps> = ({ post }) => {
           </div>
         </aside>
       )}
+      {/* 8. DELETE CONFIRMATION MODAL */}
+      <AnimatePresence>
+        {showDeleteModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="cyber-glass-glow rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-rose-500/50 space-y-4"
+              id="read-delete-confirmation-modal"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-rose-500/20 text-rose-400 flex items-center justify-center mx-auto border border-rose-500/40">
+                <AlertTriangle className="w-7 h-7" />
+              </div>
+
+              <div className="text-center space-y-2">
+                <h3 className="text-lg font-bold text-white">Delete Blog Post?</h3>
+                <p className="text-xs sm:text-sm text-cyan-200/80 leading-relaxed">
+                  Are you sure you want to permanently delete <b className="text-white font-semibold">"{post.title}"</b>? This action will remove the article from the database.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteModal(false)}
+                  disabled={isDeleting}
+                  className="px-5 py-2.5 text-xs font-semibold text-cyan-200 bg-cyan-950 hover:bg-cyan-900 rounded-xl transition-colors cursor-pointer"
+                  id="read-cancel-delete-btn"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteConfirm}
+                  disabled={isDeleting}
+                  className="px-5 py-2.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 disabled:opacity-50 rounded-xl shadow-lg transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                  id="read-confirm-delete-btn"
+                >
+                  {isDeleting ? (
+                    <span>Deleting...</span>
+                  ) : (
+                    <>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Yes, Delete Blog</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </article>
   );
 };

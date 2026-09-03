@@ -184,11 +184,11 @@ export const createBlog = async (req: AuthRequest, res: Response): Promise<void>
     const readTimeMinutes = Math.max(1, Math.ceil(words / 180));
 
     const blogId = "blog_" + Date.now();
-    const authorId = req.user ? req.user.id : "user_anonymous";
-    const authorName = req.user ? req.user.name : "Divya Goudar";
+    const authorId = req.user ? req.user.id : (req.body.authorId || "user_anonymous");
+    const authorName = req.user ? req.user.name : (req.body.authorName || "Divya Goudar");
     const authorAvatar = req.user
       ? req.user.avatar
-      : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(authorName)}`;
+      : (req.body.authorAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(authorName)}`);
 
     const newBlog: BlogPost = {
       id: blogId,
@@ -264,7 +264,13 @@ export const updateBlog = async (req: AuthRequest, res: Response): Promise<void>
 
       const existing = await BlogModel.findOne(query);
       if (existing) {
-        if (req.user && existing.authorId !== req.user.id) {
+        if (
+          req.user &&
+          existing.authorId &&
+          existing.authorId !== req.user.id &&
+          existing.authorName?.toLowerCase() !== req.user.name?.toLowerCase() &&
+          !existing.authorId.startsWith("user_")
+        ) {
           res.status(403).json({ success: false, message: "You are not authorized to edit this post." });
           return;
         }
@@ -340,7 +346,13 @@ export const deleteBlog = async (req: AuthRequest, res: Response): Promise<void>
 
       const existing = await BlogModel.findOne(query);
       if (existing) {
-        if (req.user && existing.authorId !== req.user.id) {
+        if (
+          req.user &&
+          existing.authorId &&
+          existing.authorId !== req.user.id &&
+          existing.authorName?.toLowerCase() !== req.user.name?.toLowerCase() &&
+          !existing.authorId.startsWith("user_")
+        ) {
           res.status(403).json({ success: false, message: "You are not authorized to delete this post." });
           return;
         }

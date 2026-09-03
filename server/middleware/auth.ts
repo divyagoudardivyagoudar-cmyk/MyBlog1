@@ -78,3 +78,53 @@ export const authenticateJWT = async (
     return;
   }
 };
+
+export const optionalAuthenticateJWT = async (
+  req: AuthRequest,
+  _res: Response,
+  next: NextFunction
+): Promise<void> => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return next();
+  }
+
+  const token = authHeader.split(" ")[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as {
+      id: string;
+      email: string;
+    };
+
+    let user: User | null = null;
+
+    if (isMongoDBConnected()) {
+      const dbUser = await UserModel.findOne({ id: decoded.id }).lean();
+      if (dbUser) {
+        user = {
+          id: dbUser.id,
+          name: dbUser.name,
+          email: dbUser.email,
+          username: dbUser.username,
+          avatar: dbUser.avatar,
+          bio: dbUser.bio,
+          joinedDate: dbUser.joinedDate,
+        };
+      }
+    }
+
+    if (!user) {
+      const memUser = getDb().users.find((u) => u.id === decoded.id);
+      if (memUser) {
+        user = memUser;
+      }
+    }
+
+    if (user) {
+      req.user = user;
+    }
+  } catch (error) {
+    // Gracefully continue in optional mode
+  }
+  next();
+};

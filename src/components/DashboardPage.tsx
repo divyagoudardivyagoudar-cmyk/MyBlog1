@@ -43,6 +43,7 @@ export const DashboardPage: React.FC = () => {
 
   const [scopeTab, setScopeTab] = useState<'my' | 'all'>('my');
   const [filterTab, setFilterTab] = useState<'all' | 'published' | 'draft'>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [postToDelete, setPostToDelete] = useState<BlogPost | null>(null);
 
@@ -61,6 +62,17 @@ export const DashboardPage: React.FC = () => {
     );
   }, [posts, currentUser, scopeTab]);
 
+  // Distinct categories available in target blogs
+  const availableCategories = useMemo(() => {
+    const set = new Set<string>();
+    targetBlogs.forEach((b) => {
+      if (b.category?.trim()) {
+        set.add(b.category.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [targetBlogs]);
+
   // Derived filtered blogs
   const filteredUserBlogs = useMemo(() => {
     let list = [...targetBlogs];
@@ -69,6 +81,12 @@ export const DashboardPage: React.FC = () => {
       list = list.filter((p) => p.status === 'published');
     } else if (filterTab === 'draft') {
       list = list.filter((p) => p.status === 'draft');
+    }
+
+    if (selectedCategory && selectedCategory !== 'all') {
+      list = list.filter(
+        (p) => p.category.toLowerCase() === selectedCategory.toLowerCase()
+      );
     }
 
     if (searchQuery.trim()) {
@@ -83,7 +101,7 @@ export const DashboardPage: React.FC = () => {
     }
 
     return list;
-  }, [targetBlogs, filterTab, searchQuery]);
+  }, [targetBlogs, filterTab, selectedCategory, searchQuery]);
 
   // Stats calculation
   const totalPublished = targetBlogs.filter((p) => p.status === 'published').length;
@@ -286,17 +304,50 @@ export const DashboardPage: React.FC = () => {
 
           <div className="flex flex-wrap items-center gap-3">
             {/* Search */}
-            <div className="relative w-44 sm:w-56">
+            <div className="relative w-44 sm:w-52">
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-cyan-400" />
               <input
                 type="text"
-                placeholder={scopeTab === 'all' ? 'Search all database blogs...' : 'Search my posts...'}
+                placeholder={scopeTab === 'all' ? 'Search all blogs...' : 'Search my posts...'}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 text-xs bg-cyan-950/70 text-white rounded-xl border border-cyan-500/30 focus:border-cyan-400 focus:outline-none placeholder:text-cyan-400/40"
+                className="w-full pl-8 pr-7 py-1.5 text-xs bg-cyan-950/70 text-white rounded-xl border border-cyan-500/30 focus:border-cyan-400 focus:outline-none placeholder:text-cyan-400/40"
                 id="dashboard-search-input"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-cyan-400 hover:text-white"
+                  title="Clear search"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
             </div>
+
+            {/* Category Filter */}
+            {availableCategories.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="bg-cyan-950 border border-cyan-500/30 rounded-xl px-2.5 py-1.5 text-xs text-cyan-100 font-semibold focus:border-cyan-400 focus:outline-none cursor-pointer"
+                  id="dashboard-category-filter"
+                  title="Filter articles by category"
+                >
+                  <option value="all">All Categories ({targetBlogs.length})</option>
+                  {availableCategories.map((cat) => {
+                    const count = targetBlogs.filter((b) => b.category?.toLowerCase() === cat.toLowerCase()).length;
+                    return (
+                      <option key={cat} value={cat}>
+                        {cat} ({count})
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            )}
 
             {/* Filter Tabs */}
             <div className="flex items-center p-1 bg-cyan-950/80 rounded-xl border border-cyan-500/30 text-xs font-semibold">
@@ -328,6 +379,20 @@ export const DashboardPage: React.FC = () => {
                 Drafts
               </button>
             </div>
+
+            {(searchQuery || selectedCategory !== 'all') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setSelectedCategory('all');
+                }}
+                className="text-xs text-cyan-400 hover:text-white underline ml-1 cursor-pointer"
+                title="Reset search and category filter"
+              >
+                Reset
+              </button>
+            )}
           </div>
         </div>
 
