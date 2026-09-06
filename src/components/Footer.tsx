@@ -4,7 +4,7 @@ import { BookOpen, Heart, Mail, CheckCircle2, ArrowRight, Sparkles, Shield, Cpu 
 import { INITIAL_CATEGORIES } from '../data/initialData';
 
 export const Footer: React.FC = () => {
-  const { navigateTo, setSelectedCategory } = useBlog();
+  const { navigateTo, setSelectedCategory, currentUser } = useBlog();
   const [subscribedEmail, setSubscribedEmail] = useState('');
   const [isSubscribed, setIsSubscribed] = useState(false);
 
@@ -61,6 +61,17 @@ export const Footer: React.FC = () => {
                   Home & Overview
                 </button>
               </li>
+              {currentUser && (
+                <li>
+                  <button
+                    onClick={() => navigateTo('profile')}
+                    className="hover:text-cyan-300 transition-colors text-cyan-100/70 font-semibold"
+                    id="footer-profile-link"
+                  >
+                    My Profile & Settings
+                  </button>
+                </li>
+              )}
               <li>
                 <button
                   onClick={() => navigateTo('dashboard')}

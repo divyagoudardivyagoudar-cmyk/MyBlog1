@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useBlog } from '../context/BlogContext';
 import {
   BookOpen,
@@ -22,6 +22,29 @@ export const Navbar: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showSearchInput, setShowSearchInput] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowUserDropdown(false);
+      }
+    };
+    if (showUserDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showUserDropdown]);
+
+  // Close menus on activePage change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+    setShowUserDropdown(false);
+    setShowSearchInput(false);
+  }, [activePage]);
 
   const handleNavClick = (page: 'home' | 'login' | 'register' | 'dashboard' | 'create' | 'profile', sectionId?: string) => {
     setMobileMenuOpen(false);
@@ -161,7 +184,7 @@ export const Navbar: React.FC = () => {
                 </button>
 
                 {/* User Dropdown / Profile pill */}
-                <div className="relative flex items-center gap-2 pl-2 ml-1 border-l border-cyan-500/20">
+                <div ref={dropdownRef} className="relative flex items-center gap-2 pl-2 ml-1 border-l border-cyan-500/20">
                   <button
                     onClick={() => setShowUserDropdown((prev) => !prev)}
                     className={`flex items-center gap-2 p-1 pr-2.5 rounded-full transition-all group border cursor-pointer ${
@@ -357,7 +380,7 @@ export const Navbar: React.FC = () => {
 
         {/* Mobile Navigation Drawer */}
         {mobileMenuOpen && (
-          <div className="md:hidden py-4 border-t border-cyan-500/20 space-y-2 bg-[#08172e] rounded-b-2xl p-3 border-b border-cyan-500/30" id="mobile-nav-panel">
+          <div className="md:hidden py-4 border-t border-cyan-500/20 space-y-2 bg-[#08172e] rounded-b-2xl p-3 border-b border-cyan-500/30 max-h-[80vh] overflow-y-auto" id="mobile-nav-panel">
             {currentUser && (
               <button
                 onClick={() => handleNavClick('profile')}

@@ -1,82 +1,90 @@
-# MyBlog - Full-Stack Modern Tech Blogging Platform with Node.js, Express & MongoDB
+<div align="center">
+  <h1>MyBlog Platform</h1>
+  <p><strong>A Cyber-Tech Full-Stack Blogging Platform</strong></p>
 
-A production-ready, full-stack blog application with a cyber-tech aesthetic, 3D AI robot mascot, user authentication with bcrypt and JWT, and persistent data storage using **MongoDB & Mongoose**.
+  [![React](https://img.shields.io/badge/React-18-blue.svg?style=for-the-badge&logo=react)](https://reactjs.org/)
+  [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg?style=for-the-badge&logo=node.js)](https://nodejs.org/)
+  [![Express.js](https://img.shields.io/badge/Express.js-Backend-lightgrey.svg?style=for-the-badge&logo=express)](https://expressjs.com/)
+  [![MongoDB](https://img.shields.io/badge/MongoDB-Database-47A248.svg?style=for-the-badge&logo=mongodb)](https://www.mongodb.com/)
+  [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
+</div>
 
----
+<br />
 
-## 🌟 Key Features
+> A production-ready, full-stack blog application featuring a futuristic cyber-tech aesthetic, user authentication with bcrypt and JWT, and persistent data storage using **MongoDB & Mongoose**.
 
-### 1. 🔐 User Authentication & Authorization (Module 2 & 3)
-- **User Registration**: Input validation, duplicate email check, and secure password hashing using **bcryptjs** before storage.
-- **User Login**: Secure password comparison with **bcryptjs**, JWT-based authentication tokens with 7-day expiration.
-- **Session Management**: Authenticated routes with Bearer token header verification.
-- **Author Profiles**: Profile editing (name, bio, avatar) saved directly to MongoDB.
-
-### 2. 📝 Blog Article Management (CRUD)
-- **Create Post**: Interactive markdown editor with live preview, preset banner cover image picker, automated read-time calculation, category selection, and tags.
-- **Retrieve All Blogs**: `GET /api/blogs` with multi-field search, category filtering, author-specific filtering, and sorting (Latest, Most Popular, Most Views).
-- **Individual Blog Details**: `GET /api/blogs/:id` with dynamic view-count increments, styled blockquotes, code syntax rendering, and related stories.
-- **Edit & Update**: `PUT /api/blogs/:id` with user authorization checks.
-- **Delete Post**: `DELETE /api/blogs/:id` with modal confirmation dialog and author authorization.
-- **Likes & Comments**: Real-time reader engagement with like increments and nested comment threads stored in MongoDB subdocuments.
-
-### 3. 🗄️ Database Architecture (MongoDB & Mongoose)
-- **Mongoose User Schema**: `id`, `name`, `email`, `username`, `password` (hashed), `avatar`, `bio`, `joinedDate`, `createdAt`.
-- **Mongoose Blog Schema**: `id`, `title`, `slug`, `description`, `content`, `authorId`, `authorName`, `authorAvatar`, `category`, `tags`, `coverImage`, `status` (`published` | `draft`), `likesCount`, `viewsCount`, `readTimeMinutes`, `comments`, timestamps.
-- **Graceful Error Handling & Fallback**: Database connection status monitoring, auto-seeding on fresh instances, and zero-downtime resilience.
+## 📑 Table of Contents
+- [✨ Key Features](#-key-features)
+- [🛠️ Tech Stack](#-tech-stack)
+- [📁 Architecture](#-architecture)
+- [🚀 Quick Start](#-quick-start)
+- [🌍 Deployment Guide](#-deployment-guide)
+- [📡 API Reference](#-api-reference)
+- [🛡️ Security](#-security)
 
 ---
 
-## 📁 Project Structure
+## ✨ Key Features
 
-```
-├── server.ts                    # Main Express server entry point & Vite middleware
+### 🔐 Authentication & Authorization
+- **Secure Registration**: Input validation, duplicate email checks, and secure password hashing via `bcryptjs`.
+- **JWT Sessions**: Login generates secure JWT Bearer tokens with 7-day expiration.
+- **Protected Routes**: Middleware verifies tokens for sensitive actions (creating/editing posts, updating profiles).
+- **Profile Management**: Users can update their display name, bio, and avatar, saved directly to MongoDB.
+
+### 📝 Content Management (CRUD)
+- **Markdown Editor**: Interactive rich text creation with live preview, preset banner cover images, automated read-time calculation, and category/tag tagging.
+- **Advanced Querying**: Search blogs by keyword, filter by category or author, and sort by `Latest`, `Most Popular`, or `Most Views`.
+- **Author Dashboard**: Dedicated dashboard strictly isolating the logged-in user's published articles and drafts.
+- **Interactive Reader**: View-count increments, styled blockquotes, code syntax rendering, and related stories.
+
+### 🗄️ Resilient Database
+- **Dual-Storage Support**: Runs on a robust **MongoDB** cluster via Mongoose, with an automatic in-memory fallback store if the database URI is omitted.
+- **Relational Integrity**: Comments and Likes stored in subdocuments; Author metadata synced elegantly across posts.
+
+---
+
+## 🛠️ Tech Stack
+
+### Frontend
+- **React 18** (Vite)
+- **Tailwind CSS** (Styling & Responsive Design)
+- **Lucide React** (Iconography)
+- **React Markdown** (Rich text rendering)
+
+### Backend
+- **Node.js & Express.js**
+- **MongoDB & Mongoose** (Database & ODM)
+- **JWT (jsonwebtoken)** (Authentication)
+- **Bcrypt.js** (Password Cryptography)
+
+---
+
+## 📁 Architecture
+
+```text
+├── server.ts                    # Main Express server & Vite middleware
 ├── server/
-│   ├── config/
-│   │   └── db.ts                # MongoDB connection handler & initial seed logic
-│   ├── models/
-│   │   ├── User.ts              # Mongoose User model & schema with bcrypt hooks
-│   │   └── Blog.ts              # Mongoose Blog model & schema with comments
-│   ├── controllers/
-│   │   ├── authController.ts    # Register, login, me, reset password, update profile
-│   │   └── blogController.ts    # CRUD controllers, search, filter, like, comments
-│   ├── routes/
-│   │   ├── authRoutes.ts        # REST endpoints for authentication
-│   │   └── blogRoutes.ts        # REST endpoints for blog operations
-│   ├── middleware/
-│   │   └── auth.ts              # JWT verification middleware
-│   └── db.ts                    # In-memory synchronized fallback store
+│   ├── config/db.ts             # MongoDB connection & seeding
+│   ├── models/                  # Mongoose Schemas (User, Blog)
+│   ├── controllers/             # Business logic (Auth, Blogs)
+│   ├── routes/                  # Express REST routes
+│   └── middleware/auth.ts       # JWT verification middleware
 ├── src/
-│   ├── components/
-│   │   ├── Navbar.tsx           # Global navigation with active page indicators
-│   │   ├── HomePage.tsx         # Hero section, robot mascot, filters, blog cards
-│   │   ├── BlogDetailPage.tsx   # Single blog reader with formatted markdown
-│   │   ├── CreateEditBlogPage.tsx # Live markdown editor & draft/publish flow
-│   │   ├── DashboardPage.tsx    # Author metrics, blog management table, quick actions
-│   │   ├── LoginPage.tsx        # Sign-in form with demo credential shortcuts
-│   │   ├── RegisterPage.tsx     # New account registration form
-│   │   └── RobotMascot.tsx      # Cyber-tech 3D robot mascot
-│   ├── context/
-│   │   └── BlogContext.tsx      # Global React state management and API dispatch
-│   ├── services/
-│   │   └── api.ts               # Client-side API service layer with JWT headers
-│   ├── data/
-│   │   └── initialData.ts       # Curated initial tech articles & categories
-│   ├── types.ts                 # TypeScript types & interfaces
-│   ├── App.tsx                  # Root layout & page routing
-│   └── main.tsx                 # React DOM mount point
-├── .env.example                 # Environment variables specification
-├── metadata.json                # Project metadata
-└── package.json                 # Project dependencies and build scripts
+│   ├── components/              # React UI Components (Navbar, Dashboard, Editor, etc.)
+│   ├── context/BlogContext.tsx  # Global State & API Dispatch
+│   ├── services/api.ts          # Axios/Fetch API wrappers with JWT injection
+│   └── App.tsx                  # Core React Routing
+└── .env.example                 # Environment configuration template
 ```
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Quick Start
 
 ### 1. Prerequisites
-- [Node.js](https://nodejs.org/) (v18 or higher recommended)
-- [MongoDB](https://www.mongodb.com/) (Local instance or MongoDB Atlas cluster)
+- **Node.js** (v18 or higher)
+- **MongoDB** (Local instance or Atlas cluster)
 
 ### 2. Installation
 ```bash
@@ -88,75 +96,76 @@ cd myblog
 npm install
 ```
 
-### 3. Environment Variables Setup
-Create a `.env` file in the project root by copying the `.env.example`:
+### 3. Environment Variables
+Create a `.env` file in the project root:
 ```bash
 cp .env.example .env
 ```
-
-Configure your environment variables in `.env`:
+Update the `.env` file:
 ```env
-# MongoDB Atlas or Local connection URI
+# MongoDB Atlas Connection URI
 MONGO_URI="mongodb+srv://<username>:<password>@cluster0.mongodb.net/myblog?retryWrites=true&w=majority"
 
-# JWT Secret for token signing
+# JWT Secret for Token Signing
 JWT_SECRET="my_super_secure_jwt_secret_key_2026"
 ```
 
-### 4. Running the Development Server
+### 4. Run Locally
 ```bash
+# Starts both Express API and Vite React server
 npm run dev
 ```
-The server will start on `http://localhost:3000`.
-
-### 5. Building for Production
-```bash
-npm run build
-npm start
-```
+Open `http://localhost:3000` in your browser.
 
 ---
 
-## 📡 REST API Documentation
+## 🌍 Deployment Guide
 
-### Authentication Endpoints (`/api/auth`)
+This is a full-stack **Express + Vite** application. For seamless deployment, we strongly recommend **Render** (or Railway/Heroku) to natively support full-stack Node.js servers without serverless workarounds.
 
+### 🟢 Deploying to Render (Recommended)
+1. **Push to GitHub**: Export your code and push it to a GitHub repository.
+2. **Render Dashboard**: Go to [Render.com](https://render.com/) and click **New +** -> **Web Service**.
+3. **Connect Repository**: Select your GitHub repository.
+4. **Configure**:
+   - **Environment**: `Node`
+   - **Build Command**: `npm install && npm run build`
+   - **Start Command**: `npm run start`
+5. **Environment Variables**: Add `MONGO_URI` and `JWT_SECRET` in the Advanced Settings.
+6. **Deploy**: Render will automatically build your Vite app and start your Express server!
+
+*(Note: Deploying to Vercel/Netlify requires rewriting the backend to use Serverless Functions `/api` folder structure, which is not recommended for this setup).*
+
+---
+
+## 📡 API Reference
+
+### Auth (`/api/auth`)
 | Method | Endpoint | Description | Auth Required |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/api/auth/register` | Register a new user with hashed password | No |
-| `POST` | `/api/auth/login` | Authenticate user & return JWT token | No |
-| `GET` | `/api/auth/me` | Get current logged-in user details | Yes (Bearer Token) |
-| `PUT` | `/api/auth/profile` | Update author display name, bio, and avatar | Yes (Bearer Token) |
-| `POST` | `/api/auth/reset-password` | Reset account password | No |
+| `POST` | `/api/auth/register` | Register a new user | ❌ |
+| `POST` | `/api/auth/login` | Authenticate & return JWT | ❌ |
+| `GET` | `/api/auth/me` | Get logged-in user profile | 🔐 Yes |
+| `PUT` | `/api/auth/profile` | Update user metadata | 🔐 Yes |
 
-### Blog Endpoints (`/api/blogs`)
-
+### Blogs (`/api/blogs`)
 | Method | Endpoint | Description | Auth Required |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/blogs` | Get all blogs (supports query params: `search`, `category`, `status`, `sort`) | No |
-| `GET` | `/api/blogs/:id` | Get single blog by ID & increment view count | No |
-| `POST` | `/api/blogs` | Create a new blog post | Yes (Bearer Token) |
-| `PUT` | `/api/blogs/:id` | Update an existing blog post | Yes (Bearer Token) |
-| `DELETE` | `/api/blogs/:id` | Delete a blog post | Yes (Bearer Token) |
-| `POST` | `/api/blogs/:id/like` | Like a blog post | No |
-| `POST` | `/api/blogs/:id/comments` | Add a comment to a blog post | No |
-| `GET` | `/api/categories` | Get predefined categories | No |
-
-### Health & Analytics
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/api/health` | Service and MongoDB connection status |
-| `GET` | `/api/stats` | Aggregate metrics (total posts, views, likes, users) |
+| `GET` | `/api/blogs` | Get all blogs (supports search, sort, filter) | ❌ |
+| `GET` | `/api/blogs/:id` | Get single blog (increments views) | ❌ |
+| `POST` | `/api/blogs` | Create a new blog post | 🔐 Yes |
+| `PUT` | `/api/blogs/:id` | Update an existing post | 🔐 Yes |
+| `DELETE`| `/api/blogs/:id` | Delete a post | 🔐 Yes |
 
 ---
 
-## 🛡️ Security & Quality Best Practices
-- **Password Security**: Passwords are never stored in plaintext; hashed with `bcryptjs` (salt rounds = 10).
-- **JWT Protection**: Protected routes require valid Bearer token headers.
-- **Sensitive Config**: Database credentials and JWT secrets are managed via `.env` and never leaked to frontend code.
-- **Sanitized Outputs**: User passwords and internal Mongoose revision keys (`__v`) are stripped from JSON serialization.
+## 🛡️ Security
+- **Bcrypt Hashing**: Passwords are mathematically hashed (10 salt rounds) before ever touching the database.
+- **JWT Signatures**: API protection enforced by stateless, tamper-proof JSON Web Tokens.
+- **Sanitized Payloads**: Mongoose `.lean()` and custom serializers ensure sensitive data (passwords, `__v` tags) never leak to the client network.
 
 ---
 
-## 📄 License
-This project is open-source and available under the [MIT License](LICENSE).
+<div align="center">
+  <p>Built with ❤️ using React, Express, and MongoDB.</p>
+</div>

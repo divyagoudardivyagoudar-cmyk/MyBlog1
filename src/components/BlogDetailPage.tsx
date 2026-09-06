@@ -34,11 +34,13 @@ export const BlogDetailPage: React.FC<BlogDetailPageProps> = ({ post }) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const isAuthorOrPermitted =
-    !currentUser ||
-    currentUser.id === post.authorId ||
-    currentUser.name.toLowerCase() === post.authorName.toLowerCase() ||
-    post.authorId.startsWith('user_');
+  const isAuthorOrPermitted = Boolean(
+    currentUser && (
+      currentUser.id === post.authorId ||
+      currentUser.name.toLowerCase() === post.authorName.toLowerCase() ||
+      (currentUser.username && post.authorId === `user_${currentUser.username}`)
+    )
+  );
 
   const handleDeleteConfirm = async () => {
     setIsDeleting(true);
@@ -162,7 +164,7 @@ export const BlogDetailPage: React.FC<BlogDetailPageProps> = ({ post }) => {
       
       {/* 1. TOP BREADCRUMB & BACK NAV */}
       <div className="bg-[#040d1a]/80 border-b border-cyan-500/20 py-4 backdrop-blur-md sticky top-16 z-30">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <button
             onClick={() => navigateTo('home')}
             className="inline-flex items-center gap-2 text-xs font-bold text-cyan-300 hover:text-white transition-colors"
@@ -172,7 +174,7 @@ export const BlogDetailPage: React.FC<BlogDetailPageProps> = ({ post }) => {
             <span>Back to Stories</span>
           </button>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => navigateTo('dashboard')}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-cyan-300 bg-cyan-950/60 hover:bg-cyan-900 border border-cyan-500/30 rounded-xl transition-colors"

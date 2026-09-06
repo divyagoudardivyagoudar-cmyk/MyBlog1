@@ -41,10 +41,10 @@ export const RobotMascot: React.FC<RobotMascotProps> = ({
 
   // Dimensions based on size
   const sizeMap = {
-    sm: 'w-24 h-24',
-    md: 'w-36 h-36',
-    lg: 'w-48 h-48',
-    hero: 'w-64 h-64 sm:w-72 sm:h-72 lg:w-80 lg:h-80',
+    sm: 'w-20 h-20 sm:w-24 sm:h-24',
+    md: 'w-32 h-32 sm:w-36 sm:h-36',
+    lg: 'w-44 h-44 sm:w-48 sm:h-48',
+    hero: 'w-52 h-52 sm:w-68 sm:h-68 lg:w-80 lg:h-80',
   };
 
   return (

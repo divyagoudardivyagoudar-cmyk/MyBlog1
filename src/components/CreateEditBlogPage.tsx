@@ -299,7 +299,7 @@ export const CreateEditBlogPage: React.FC<CreateEditBlogPageProps> = ({ editPost
             <label className="block text-xs font-bold text-cyan-200 uppercase tracking-wider">
               Category <span className="text-rose-400">*</span>
             </label>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
@@ -322,7 +322,7 @@ export const CreateEditBlogPage: React.FC<CreateEditBlogPageProps> = ({ editPost
                   placeholder="Type category"
                   value={customCategory}
                   onChange={(e) => setCustomCategory(e.target.value)}
-                  className="w-48 px-3 py-2 text-xs bg-cyan-950 border border-cyan-500/40 rounded-xl text-white focus:border-cyan-400 focus:outline-none"
+                  className="w-full sm:w-48 px-3 py-2 text-xs bg-cyan-950 border border-cyan-500/40 rounded-xl text-white focus:border-cyan-400 focus:outline-none"
                   id="blog-custom-category-input"
                 />
               )}
