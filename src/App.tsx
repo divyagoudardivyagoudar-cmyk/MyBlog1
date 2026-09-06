@@ -14,6 +14,9 @@ import { RegisterPage } from './components/RegisterPage';
 import { DashboardPage } from './components/DashboardPage';
 import { CreateEditBlogPage } from './components/CreateEditBlogPage';
 import { BlogDetailPage } from './components/BlogDetailPage';
+import { ProfilePage } from './components/ProfilePage';
+import { LogoutModal } from './components/LogoutModal';
+import { ProtectedRoute } from './components/ProtectedRoute';
 
 const MainRouter: React.FC = () => {
   const { activePage, selectedPost, posts } = useBlog();
@@ -26,9 +29,26 @@ const MainRouter: React.FC = () => {
         {activePage === 'home' && <HomePage />}
         {activePage === 'login' && <LoginPage />}
         {activePage === 'register' && <RegisterPage />}
-        {activePage === 'dashboard' && <DashboardPage />}
-        {activePage === 'create' && <CreateEditBlogPage />}
-        {activePage === 'edit' && <CreateEditBlogPage editPost={selectedPost} />}
+        {activePage === 'dashboard' && (
+          <ProtectedRoute requiredPage="dashboard">
+            <DashboardPage />
+          </ProtectedRoute>
+        )}
+        {activePage === 'profile' && (
+          <ProtectedRoute requiredPage="profile">
+            <ProfilePage />
+          </ProtectedRoute>
+        )}
+        {activePage === 'create' && (
+          <ProtectedRoute requiredPage="create">
+            <CreateEditBlogPage />
+          </ProtectedRoute>
+        )}
+        {activePage === 'edit' && (
+          <ProtectedRoute requiredPage="edit" postToEdit={selectedPost}>
+            <CreateEditBlogPage editPost={selectedPost} />
+          </ProtectedRoute>
+        )}
         {activePage === 'read' && (
           <BlogDetailPage post={selectedPost || posts[0]} />
         )}
@@ -36,6 +56,7 @@ const MainRouter: React.FC = () => {
 
       <Footer />
       <Toast />
+      <LogoutModal />
     </div>
   );
 };

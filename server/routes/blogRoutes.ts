@@ -8,19 +8,30 @@ import {
   likeBlog,
   addComment,
   getCategories,
+  getAuthorDashboard,
 } from "../controllers/blogController.js";
-import { optionalAuthenticateJWT } from "../middleware/auth.js";
+import { authenticateJWT, optionalAuthenticateJWT } from "../middleware/auth.js";
 
 const router = Router();
 
+// Public read endpoints
 router.get("/categories", getCategories);
 router.get("/", getBlogs);
+
+// Private Author Dashboard (Protected - MUST precede /:id)
+router.get("/author/dashboard", authenticateJWT, getAuthorDashboard);
+
+// Public single post read
 router.get("/:id", getBlogById);
-router.post("/", optionalAuthenticateJWT, createBlog);
-router.put("/:id", optionalAuthenticateJWT, updateBlog);
-router.delete("/:id", optionalAuthenticateJWT, deleteBlog);
+
+// Protected creator actions (Strict JWT required)
+router.post("/", authenticateJWT, createBlog);
+router.put("/:id", authenticateJWT, updateBlog);
+router.delete("/:id", authenticateJWT, deleteBlog);
+
+// Social actions
 router.post("/:id/like", likeBlog);
-router.post("/:id/comments", addComment);
+router.post("/:id/comments", optionalAuthenticateJWT, addComment);
 
 export default router;
 

@@ -1,7 +1,16 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { BlogPost, Comment, ToastMessage, User, ActivePage } from '../types';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { BlogPost, Comment, ToastMessage, User, ActivePage, SessionInfo } from '../types';
 import { INITIAL_BLOGS, INITIAL_USERS } from '../data/initialData';
-import { api, setAuthToken, setApiToastHandler } from '../services/api';
+import { api, setAuthToken, setApiToastHandler, getAuthToken, getSessionExpiresAt } from '../services/api';
+
+export interface IntendedDestination {
+  page: ActivePage;
+  post?: BlogPost | null;
+}
+
+export const isRouteProtected = (page: ActivePage): boolean => {
+  return page === 'dashboard' || page === 'create' || page === 'edit' || page === 'profile';
+};
 
 interface BlogContextType {
   currentUser: User | null;
@@ -14,15 +23,25 @@ interface BlogContextType {
   toasts: ToastMessage[];
   serverConnected: boolean;
   isLoadingPosts: boolean;
+  sessionInfo: SessionInfo | null;
+  isSessionLoading: boolean;
+  intendedDestination: IntendedDestination | null;
+  isLogoutModalOpen: boolean;
+  openLogoutModal: () => void;
+  closeLogoutModal: () => void;
+  setIntendedDestination: (dest: IntendedDestination | null) => void;
+  isRouteProtected: (page: ActivePage) => boolean;
+  refreshSession: () => Promise<boolean>;
+  checkSession: () => Promise<boolean>;
   fetchBlogs: () => Promise<void>;
   navigateTo: (page: ActivePage, post?: BlogPost | null) => void;
   setSearchQuery: (query: string) => void;
   setSelectedCategory: (cat: string) => void;
   login: (emailOrUsername: string, password?: string) => Promise<{ success: boolean; message: string }>;
   register: (name: string, email: string, username: string, password?: string) => Promise<{ success: boolean; message: string }>;
-  logout: () => void;
+  logout: () => Promise<void>;
   resetPassword: (email: string, newPass: string) => Promise<{ success: boolean; message: string }>;
-  updateProfile: (updatedData: Partial<User>) => Promise<void>;
+  updateProfile: (updatedData: Partial<User> & { currentPassword?: string; newPassword?: string }) => Promise<{ success: boolean; message: string; user?: User }>;
   createPost: (postData: Omit<BlogPost, 'id' | 'createdAt' | 'updatedAt' | 'likesCount' | 'viewsCount' | 'comments' | 'slug'>) => Promise<BlogPost>;
   updatePost: (id: string, postData: Partial<BlogPost>) => Promise<void>;
   deletePost: (id: string) => Promise<void>;
@@ -77,7 +96,28 @@ export const BlogProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return null;
   });
 
-  const [activePage, setActivePage] = useState<ActivePage>('register');
+  const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(() => {
+    const token = getAuthToken();
+    const expiresAt = getSessionExpiresAt();
+    if (token) {
+      return {
+        authenticated: true,
+        user: null,
+        expiresAt,
+        issuedAt: null,
+        token,
+      };
+    }
+    return null;
+  });
+  const [isSessionLoading, setIsSessionLoading] = useState<boolean>(true);
+  const [intendedDestination, setIntendedDestination] = useState<IntendedDestination | null>(null);
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState<boolean>(false);
+
+  const openLogoutModal = () => setIsLogoutModalOpen(true);
+  const closeLogoutModal = () => setIsLogoutModalOpen(false);
+
+  const [activePage, setActivePage] = useState<ActivePage>('home');
   const [selectedPost, setSelectedPost] = useState<BlogPost | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -118,7 +158,43 @@ export const BlogProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Initial load from backend server
+  // Verify active JWT session with backend
+  const checkSession = useCallback(async (): Promise<boolean> => {
+    const token = getAuthToken();
+    if (!token) {
+      setCurrentUser(null);
+      setSessionInfo(null);
+      setIsSessionLoading(false);
+      return false;
+    }
+
+    try {
+      const res = await api.getSession();
+      if (res && res.authenticated && res.user) {
+        setCurrentUser(res.user);
+        setSessionInfo({
+          authenticated: true,
+          user: res.user,
+          expiresAt: res.session?.expiresAt || null,
+          issuedAt: res.session?.issuedAt || null,
+          expiresInSeconds: res.session?.timeRemainingSeconds,
+          token,
+        });
+        setIsSessionLoading(false);
+        return true;
+      }
+    } catch (_err) {
+      // Backend session verification failed or returned 401
+    }
+
+    setAuthToken(null);
+    setCurrentUser(null);
+    setSessionInfo(null);
+    setIsSessionLoading(false);
+    return false;
+  }, []);
+
+  // Initial load from backend server & session bootstrap
   useEffect(() => {
     const initData = async () => {
       try {
@@ -129,10 +205,10 @@ export const BlogProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (err) {
         console.warn('Health check note:', err);
       }
-      await fetchBlogs();
+      await Promise.all([checkSession(), fetchBlogs()]);
     };
     initData();
-  }, []);
+  }, [checkSession]);
 
   const showToast = (type: 'success' | 'error' | 'info', message: string) => {
     const id = Date.now().toString() + Math.random().toString(36).substring(2, 5);
@@ -142,7 +218,7 @@ export const BlogProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, 4000);
   };
 
-  // Register Toast handler with Axios API service for global interceptors
+  // Register Toast handler and listen for JWT session expiration events
   useEffect(() => {
     setApiToastHandler(showToast);
 
@@ -153,21 +229,71 @@ export const BlogProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
 
+    const handleSessionExpired = (event: Event) => {
+      const customEvent = event as CustomEvent<{ message?: string }>;
+      setCurrentUser(null);
+      setSessionInfo(null);
+      setAuthToken(null);
+      showToast('error', customEvent.detail?.message || 'Your session has expired. Please sign in again.');
+      if (isRouteProtected(activePage)) {
+        setIntendedDestination({ page: activePage, post: selectedPost });
+      }
+      navigateTo('login');
+    };
+
     window.addEventListener('blog:toast', handleCustomToast);
+    window.addEventListener('blog:session-expired', handleSessionExpired);
+
     return () => {
       setApiToastHandler(null);
       window.removeEventListener('blog:toast', handleCustomToast);
+      window.removeEventListener('blog:session-expired', handleSessionExpired);
     };
-  }, []);
+  }, [activePage, selectedPost]);
 
   const removeToast = (id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
   const navigateTo = (page: ActivePage, post: BlogPost | null = null) => {
+    if (isRouteProtected(page) && !currentUser && !getAuthToken()) {
+      setIntendedDestination({ page, post });
+    }
     setActivePage(page);
     setSelectedPost(post);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const refreshSession = async (): Promise<boolean> => {
+    try {
+      const res = await api.refreshToken();
+      if (res && res.success && res.token) {
+        setSessionInfo({
+          authenticated: true,
+          user: res.user || currentUser,
+          expiresAt: res.session?.expiresAt || null,
+          issuedAt: res.session?.issuedAt || null,
+          expiresInSeconds: res.session?.expiresInSeconds,
+          token: res.token,
+        });
+        showToast('success', 'JWT Session renewed successfully! Active for 7 days.');
+        return true;
+      }
+    } catch (err: any) {
+      showToast('error', err.response?.data?.message || 'Failed to refresh session.');
+    }
+    return false;
+  };
+
+  const resolvePostAuthNavigation = () => {
+    if (intendedDestination) {
+      const dest = intendedDestination;
+      setIntendedDestination(null);
+      navigateTo(dest.page, dest.post || null);
+      showToast('info', `Access granted: Resumed to ${dest.page} space.`);
+    } else {
+      navigateTo('dashboard');
+    }
   };
 
   const login = async (emailOrUsername: string, password?: string): Promise<{ success: boolean; message: string }> => {
@@ -175,7 +301,16 @@ export const BlogProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const response = await api.login(emailOrUsername, password || 'password123');
       if (response && response.success && response.user) {
         setCurrentUser(response.user);
+        setSessionInfo({
+          authenticated: true,
+          user: response.user,
+          expiresAt: response.session?.expiresAt || null,
+          issuedAt: response.session?.issuedAt || null,
+          expiresInSeconds: response.session?.expiresInSeconds,
+          token: response.token,
+        });
         showToast('success', `Welcome back, ${response.user.name}!`);
+        resolvePostAuthNavigation();
         return { success: true, message: response.message || 'Login successful' };
       }
     } catch (e) {
@@ -199,7 +334,15 @@ export const BlogProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     setCurrentUser(user);
+    setSessionInfo({
+      authenticated: true,
+      user,
+      expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+      issuedAt: new Date().toISOString(),
+      expiresInSeconds: 7 * 24 * 3600,
+    });
     showToast('success', `Welcome back, ${user.name}!`);
+    resolvePostAuthNavigation();
     return { success: true, message: 'Login successful' };
   };
 
@@ -209,7 +352,16 @@ export const BlogProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (response && response.success && response.user) {
         setUsers((prev) => [...prev, response.user]);
         setCurrentUser(response.user);
+        setSessionInfo({
+          authenticated: true,
+          user: response.user,
+          expiresAt: response.session?.expiresAt || null,
+          issuedAt: response.session?.issuedAt || null,
+          expiresInSeconds: response.session?.expiresInSeconds,
+          token: response.token,
+        });
         showToast('success', `Account created successfully! Welcome, ${response.user.name}!`);
+        resolvePostAuthNavigation();
         return { success: true, message: 'Registration successful' };
       } else if (response && !response.success) {
         return { success: false, message: response.message || 'Registration failed' };
@@ -243,15 +395,34 @@ export const BlogProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setUsers((prev) => [...prev, newUser]);
     setCurrentUser(newUser);
+    setSessionInfo({
+      authenticated: true,
+      user: newUser,
+      expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+      issuedAt: new Date().toISOString(),
+      expiresInSeconds: 7 * 24 * 3600,
+    });
     showToast('success', `Account created successfully! Welcome, ${newUser.name}!`);
+    resolvePostAuthNavigation();
     return { success: true, message: 'Registration successful' };
   };
 
-  const logout = () => {
+  const logout = async () => {
+    setIsLogoutModalOpen(false);
+    try {
+      await api.logout();
+    } catch (_e) {
+      // Continue cleanup regardless
+    }
     setAuthToken(null);
     setCurrentUser(null);
-    showToast('info', `You have been logged out.`);
-    navigateTo('home');
+    setSessionInfo(null);
+    setIntendedDestination(null);
+    localStorage.removeItem(CURRENT_USER_STORAGE_KEY);
+    showToast('info', 'You have been successfully logged out.');
+    if (isRouteProtected(activePage)) {
+      navigateTo('home');
+    }
   };
 
   const resetPassword = async (email: string, newPass: string): Promise<{ success: boolean; message: string }> => {
@@ -279,17 +450,62 @@ export const BlogProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true, message: 'Password reset successfully. You can now log in.' };
   };
 
-  const updateProfile = async (updatedData: Partial<User>) => {
-    if (!currentUser) return;
-    try {
-      await api.updateProfile(updatedData);
-    } catch (e) {
-      console.warn('API updateProfile error:', e);
+  const updateProfile = async (
+    updatedData: Partial<User> & { currentPassword?: string; newPassword?: string }
+  ): Promise<{ success: boolean; message: string; user?: User }> => {
+    if (!currentUser) {
+      return { success: false, message: 'You must be logged in to update your profile.' };
     }
-    const updated = { ...currentUser, ...updatedData };
+
+    try {
+      const res = await api.updateProfile(updatedData);
+      if (res && res.success && res.user) {
+        const updatedUser: User = {
+          ...currentUser,
+          ...res.user,
+        };
+        setCurrentUser(updatedUser);
+        setUsers((prev) => prev.map((u) => (u.id === currentUser.id ? updatedUser : u)));
+
+        // Synchronize author data on cached posts
+        if (updatedData.name || updatedData.avatar) {
+          setPosts((prev) =>
+            prev.map((p) => {
+              if (p.authorId === currentUser.id || p.authorName === currentUser.name) {
+                return {
+                  ...p,
+                  ...(updatedData.name ? { authorName: updatedData.name } : {}),
+                  ...(updatedData.avatar ? { authorAvatar: updatedData.avatar } : {}),
+                };
+              }
+              return p;
+            })
+          );
+        }
+
+        showToast('success', res.message || 'Profile updated successfully!');
+        return { success: true, message: res.message || 'Profile updated successfully!', user: updatedUser };
+      } else if (res && !res.success) {
+        showToast('error', res.message || 'Failed to update profile.');
+        return { success: false, message: res.message || 'Failed to update profile.' };
+      }
+    } catch (e: any) {
+      const serverMsg = e?.response?.data?.message || e?.message || 'Error updating profile.';
+      showToast('error', serverMsg);
+      return { success: false, message: serverMsg };
+    }
+
+    // Local fallback update
+    const updated = {
+      ...currentUser,
+      ...(updatedData.name && { name: updatedData.name }),
+      ...(updatedData.bio !== undefined && { bio: updatedData.bio }),
+      ...(updatedData.avatar && { avatar: updatedData.avatar }),
+    };
     setCurrentUser(updated);
     setUsers((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
-    showToast('success', 'Profile updated successfully!');
+    showToast('success', 'Profile updated locally!');
+    return { success: true, message: 'Profile updated successfully!', user: updated };
   };
 
   const createPost = async (postData: Omit<BlogPost, 'id' | 'createdAt' | 'updatedAt' | 'likesCount' | 'viewsCount' | 'comments' | 'slug'>): Promise<BlogPost> => {
@@ -449,6 +665,16 @@ export const BlogProvider: React.FC<{ children: React.ReactNode }> = ({ children
         toasts,
         serverConnected,
         isLoadingPosts,
+        sessionInfo,
+        isSessionLoading,
+        intendedDestination,
+        isLogoutModalOpen,
+        openLogoutModal,
+        closeLogoutModal,
+        setIntendedDestination,
+        isRouteProtected,
+        refreshSession,
+        checkSession,
         fetchBlogs,
         navigateTo,
         setSearchQuery,

@@ -47,10 +47,19 @@ export interface CategoryInfo {
   bgLight: string;
 }
 
-export type ActivePage = 'home' | 'login' | 'register' | 'dashboard' | 'create' | 'edit' | 'read';
+export type ActivePage = 'home' | 'login' | 'register' | 'dashboard' | 'create' | 'edit' | 'read' | 'profile';
 
 export interface ToastMessage {
   id: string;
   type: 'success' | 'error' | 'info';
   message: string;
+}
+
+export interface SessionInfo {
+  authenticated: boolean;
+  user: User | null;
+  expiresAt: string | null;
+  issuedAt: string | null;
+  expiresInSeconds?: number;
+  token?: string | null;
 }

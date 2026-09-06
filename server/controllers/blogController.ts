@@ -158,9 +158,107 @@ export const getBlogById = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
+// GET /api/blogs/author/dashboard (Protected - Author's Private Analytics & Management)
+export const getAuthorDashboard = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        code: "UNAUTHORIZED",
+        message: "Authentication required to access private author dashboard.",
+      });
+      return;
+    }
+
+    const userId = req.user.id;
+    const userName = (req.user.name || "").trim().toLowerCase();
+    const userUsername = (req.user.username || "").trim().toLowerCase();
+
+    let userBlogs: BlogPost[] = [];
+
+    const matchesUser = (b: BlogPost) => {
+      if (b.authorId && (b.authorId === userId || (userUsername && b.authorId === userUsername))) return true;
+      if (b.authorName && userName && b.authorName.trim().toLowerCase() === userName) return true;
+      if (b.authorName && userUsername && b.authorName.trim().toLowerCase() === userUsername) return true;
+      return false;
+    };
+
+    if (isMongoDBConnected()) {
+      const orConditions: any[] = [
+        { authorId: userId },
+        { authorName: { $regex: new RegExp(`^${userName}$`, "i") } },
+      ];
+      if (userUsername) {
+        orConditions.push({ authorId: userUsername });
+        orConditions.push({ authorName: { $regex: new RegExp(`^${userUsername}$`, "i") } });
+      }
+      const found = await BlogModel.find({
+        $or: orConditions,
+      })
+        .sort({ createdAt: -1 })
+        .lean();
+      userBlogs = found as any[];
+    } else {
+      const db = getDb();
+      userBlogs = db.blogs.filter(matchesUser);
+    }
+
+    const publishedBlogs = userBlogs.filter((b) => b.status === "published");
+    const draftBlogs = userBlogs.filter((b) => b.status === "draft");
+    const totalViews = userBlogs.reduce((acc, b) => acc + (b.viewsCount || 0), 0);
+    const totalLikes = userBlogs.reduce((acc, b) => acc + (b.likesCount || 0), 0);
+    const totalComments = userBlogs.reduce((acc, b) => acc + (b.comments?.length || 0), 0);
+
+    const categoriesMap: Record<string, number> = {};
+    userBlogs.forEach((b) => {
+      if (b.category) {
+        categoriesMap[b.category] = (categoriesMap[b.category] || 0) + 1;
+      }
+    });
+
+    res.json({
+      success: true,
+      author: {
+        id: req.user.id,
+        name: req.user.name,
+        email: req.user.email,
+        username: req.user.username,
+        avatar: req.user.avatar,
+        bio: req.user.bio,
+      },
+      stats: {
+        totalPosts: userBlogs.length,
+        publishedCount: publishedBlogs.length,
+        draftCount: draftBlogs.length,
+        totalViews,
+        totalLikes,
+        totalComments,
+        categoriesCount: Object.keys(categoriesMap).length,
+      },
+      categoriesBreakdown: categoriesMap,
+      blogs: userBlogs,
+    });
+  } catch (error: any) {
+    console.error("Author Dashboard Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to retrieve author dashboard data.",
+    });
+  }
+};
+
 // POST /api/blogs (Protected)
 export const createBlog = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        code: "UNAUTHORIZED",
+        message: "Authentication required: Please sign in to create or publish blog posts.",
+      });
+      return;
+    }
+
     const { title, description, content, category, tags, coverImage, status } = req.body;
 
     // Validate inputs
@@ -184,11 +282,11 @@ export const createBlog = async (req: AuthRequest, res: Response): Promise<void>
     const readTimeMinutes = Math.max(1, Math.ceil(words / 180));
 
     const blogId = "blog_" + Date.now();
-    const authorId = req.user ? req.user.id : (req.body.authorId || "user_anonymous");
-    const authorName = req.user ? req.user.name : (req.body.authorName || "Divya Goudar");
-    const authorAvatar = req.user
-      ? req.user.avatar
-      : (req.body.authorAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(authorName)}`);
+    const authorId = req.user.id;
+    const authorName = req.user.name || "Anonymous Creator";
+    const authorAvatar =
+      req.user.avatar ||
+      `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(authorName)}`;
 
     const newBlog: BlogPost = {
       id: blogId,
@@ -246,6 +344,15 @@ export const createBlog = async (req: AuthRequest, res: Response): Promise<void>
 // PUT /api/blogs/:id (Protected)
 export const updateBlog = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        code: "UNAUTHORIZED",
+        message: "Authentication required: Please sign in to update blog posts.",
+      });
+      return;
+    }
+
     const { id } = req.params;
     const { title, description, content, category, tags, coverImage, status } = req.body;
 
@@ -265,13 +372,16 @@ export const updateBlog = async (req: AuthRequest, res: Response): Promise<void>
       const existing = await BlogModel.findOne(query);
       if (existing) {
         if (
-          req.user &&
           existing.authorId &&
           existing.authorId !== req.user.id &&
           existing.authorName?.toLowerCase() !== req.user.name?.toLowerCase() &&
           !existing.authorId.startsWith("user_")
         ) {
-          res.status(403).json({ success: false, message: "You are not authorized to edit this post." });
+          res.status(403).json({
+            success: false,
+            code: "FORBIDDEN",
+            message: "Ownership Protection: You are not authorized to edit another author's post.",
+          });
           return;
         }
 
@@ -298,6 +408,20 @@ export const updateBlog = async (req: AuthRequest, res: Response): Promise<void>
     const blogIndex = db.blogs.findIndex((b) => b.id === id);
     if (blogIndex !== -1) {
       const memExisting = db.blogs[blogIndex];
+      if (
+        memExisting.authorId &&
+        memExisting.authorId !== req.user.id &&
+        memExisting.authorName?.toLowerCase() !== req.user.name?.toLowerCase() &&
+        !memExisting.authorId.startsWith("user_")
+      ) {
+        res.status(403).json({
+          success: false,
+          code: "FORBIDDEN",
+          message: "Ownership Protection: You are not authorized to edit another author's post.",
+        });
+        return;
+      }
+
       const updatedContent = content !== undefined ? content : memExisting.content;
       const words = updatedContent.trim().split(/\s+/).length;
       const readTimeMinutes = Math.max(1, Math.ceil(words / 180));
@@ -336,6 +460,15 @@ export const updateBlog = async (req: AuthRequest, res: Response): Promise<void>
 // DELETE /api/blogs/:id (Protected)
 export const deleteBlog = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        code: "UNAUTHORIZED",
+        message: "Authentication required: Please sign in to delete blog posts.",
+      });
+      return;
+    }
+
     const { id } = req.params;
     let deleted = false;
 
@@ -347,13 +480,16 @@ export const deleteBlog = async (req: AuthRequest, res: Response): Promise<void>
       const existing = await BlogModel.findOne(query);
       if (existing) {
         if (
-          req.user &&
           existing.authorId &&
           existing.authorId !== req.user.id &&
           existing.authorName?.toLowerCase() !== req.user.name?.toLowerCase() &&
           !existing.authorId.startsWith("user_")
         ) {
-          res.status(403).json({ success: false, message: "You are not authorized to delete this post." });
+          res.status(403).json({
+            success: false,
+            code: "FORBIDDEN",
+            message: "Ownership Protection: You are not authorized to delete another author's post.",
+          });
           return;
         }
         await BlogModel.deleteOne(query);
@@ -364,6 +500,20 @@ export const deleteBlog = async (req: AuthRequest, res: Response): Promise<void>
     const db = getDb();
     const blogIndex = db.blogs.findIndex((b) => b.id === id);
     if (blogIndex !== -1) {
+      const memExisting = db.blogs[blogIndex];
+      if (
+        memExisting.authorId &&
+        memExisting.authorId !== req.user.id &&
+        memExisting.authorName?.toLowerCase() !== req.user.name?.toLowerCase() &&
+        !memExisting.authorId.startsWith("user_")
+      ) {
+        res.status(403).json({
+          success: false,
+          code: "FORBIDDEN",
+          message: "Ownership Protection: You are not authorized to delete another author's post.",
+        });
+        return;
+      }
       db.blogs.splice(blogIndex, 1);
       deleted = true;
     }

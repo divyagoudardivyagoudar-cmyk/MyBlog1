@@ -22,7 +22,8 @@ import {
   Check,
   AlertCircle,
   Tag,
-  LayoutDashboard
+  LayoutDashboard,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface CreateEditBlogPageProps {
@@ -109,6 +110,12 @@ export const CreateEditBlogPage: React.FC<CreateEditBlogPageProps> = ({ editPost
 
   const handleSave = async (status: 'published' | 'draft') => {
     if (!validateForm()) return;
+
+    if (!currentUser) {
+      setError('Authentication required: You must be signed in to an author account to save articles.');
+      return;
+    }
+
     setIsSaving(true);
 
     try {
@@ -129,11 +136,11 @@ export const CreateEditBlogPage: React.FC<CreateEditBlogPageProps> = ({ editPost
         'A new blog article on MyBlog.';
 
       const authorAvatar =
-        currentUser && currentUser.name === authorName
+        currentUser.name === authorName
           ? currentUser.avatar
           : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(authorName)}`;
 
-      const authorId = currentUser ? currentUser.id : 'user_guest';
+      const authorId = currentUser.id;
 
       if (isEditing && editPost) {
         const updatePayload = {
@@ -186,10 +193,16 @@ export const CreateEditBlogPage: React.FC<CreateEditBlogPageProps> = ({ editPost
             <PenSquare className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight uppercase flex items-center gap-2">
-              <span>{isEditing ? 'EDIT BLOG POST' : 'CREATE NEW BLOG'}</span>
-            </h1>
-            <p className="text-xs text-cyan-200/70">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight uppercase">
+                {isEditing ? 'EDIT BLOG POST' : 'CREATE NEW BLOG'}
+              </h1>
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-[10px] font-mono text-cyan-300 font-bold uppercase tracking-wider">
+                <ShieldCheck className="w-3 h-3 text-cyan-400" />
+                Protected Route
+              </span>
+            </div>
+            <p className="text-xs text-cyan-200/70 mt-0.5">
               {isEditing
                 ? 'Update your article details and save or publish changes.'
                 : 'Draft a story, tutorial, or guide with live Markdown & syntax highlighting.'}

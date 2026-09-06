@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useBlog } from '../context/BlogContext';
 import { BlogPost, User } from '../types';
+import { api } from '../services/api';
 import {
   PenSquare,
   Eye,
@@ -25,7 +26,13 @@ import {
   LogIn,
   UserPlus,
   RefreshCw,
-  Database
+  Database,
+  ShieldCheck,
+  Clock,
+  Key,
+  Copy,
+  Check,
+  LogOut
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -38,14 +45,20 @@ export const DashboardPage: React.FC = () => {
     updateProfile,
     showToast,
     fetchBlogs,
-    isLoadingPosts
+    isLoadingPosts,
+    sessionInfo,
+    refreshSession,
+    openLogoutModal,
+    logout
   } = useBlog();
 
-  const [scopeTab, setScopeTab] = useState<'my' | 'all'>('my');
   const [filterTab, setFilterTab] = useState<'all' | 'published' | 'draft'>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [postToDelete, setPostToDelete] = useState<BlogPost | null>(null);
+  const [isRefreshingToken, setIsRefreshingToken] = useState(false);
+  const [copiedToken, setCopiedToken] = useState(false);
+  const [showSessionDetails, setShowSessionDetails] = useState(false);
 
   // Edit Profile Modal
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
@@ -53,16 +66,30 @@ export const DashboardPage: React.FC = () => {
   const [editBio, setEditBio] = useState(currentUser?.bio || '');
   const [editAvatar, setEditAvatar] = useState(currentUser?.avatar || '');
 
-  // Filter posts based on scope
+  // Strictly filter posts for the logged-in user only
   const targetBlogs = useMemo(() => {
-    if (scopeTab === 'all') return posts;
     if (!currentUser) return [];
-    return posts.filter(
-      (p) => p.authorId === currentUser.id || p.authorName.toLowerCase() === currentUser.name.toLowerCase()
-    );
-  }, [posts, currentUser, scopeTab]);
+    const userId = currentUser.id;
+    const userName = currentUser.name.trim().toLowerCase();
+    const userUsername = (currentUser.username || '').trim().toLowerCase();
 
-  // Distinct categories available in target blogs
+    return posts.filter((p) => {
+      // Check author ID
+      if (p.authorId) {
+        if (p.authorId === userId) return true;
+        if (userUsername && p.authorId === userUsername) return true;
+      }
+      // Check author name
+      if (p.authorName) {
+        const pAuthor = p.authorName.trim().toLowerCase();
+        if (pAuthor === userName) return true;
+        if (userUsername && pAuthor === userUsername) return true;
+      }
+      return false;
+    });
+  }, [posts, currentUser]);
+
+  // Distinct categories available in user's blogs
   const availableCategories = useMemo(() => {
     const set = new Set<string>();
     targetBlogs.forEach((b) => {
@@ -73,7 +100,7 @@ export const DashboardPage: React.FC = () => {
     return Array.from(set).sort();
   }, [targetBlogs]);
 
-  // Derived filtered blogs
+  // Derived filtered user blogs
   const filteredUserBlogs = useMemo(() => {
     let list = [...targetBlogs];
 
@@ -95,15 +122,50 @@ export const DashboardPage: React.FC = () => {
         (p) =>
           p.title.toLowerCase().includes(q) ||
           p.category.toLowerCase().includes(q) ||
-          p.description.toLowerCase().includes(q) ||
-          p.authorName.toLowerCase().includes(q)
+          p.description.toLowerCase().includes(q)
       );
     }
 
     return list;
   }, [targetBlogs, filterTab, selectedCategory, searchQuery]);
 
-  // Stats calculation
+  // Stats calculation for logged-in user's blogs
+  const [serverStats, setServerStats] = useState<{
+    totalPosts: number;
+    publishedPosts: number;
+    draftPosts: number;
+    totalViews: number;
+    totalLikes: number;
+    database: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (currentUser) {
+      let isMounted = true;
+      api.getAuthorDashboard()
+        .then((res) => {
+          if (isMounted && res.success && res.stats) {
+            setServerStats({
+              totalPosts: res.stats.totalPosts,
+              publishedPosts: res.stats.publishedCount,
+              draftPosts: res.stats.draftCount,
+              totalViews: res.stats.totalViews,
+              totalLikes: res.stats.totalLikes,
+              database: res.database || 'MongoDB Atlas / Express',
+            });
+          }
+        })
+        .catch((err) => {
+          console.warn('Author dashboard api call fallback to local:', err);
+        });
+
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [currentUser, posts]);
+
+  const totalArticles = targetBlogs.length;
   const totalPublished = targetBlogs.filter((p) => p.status === 'published').length;
   const totalDrafts = targetBlogs.filter((p) => p.status === 'draft').length;
   const totalViews = targetBlogs.reduce((acc, p) => acc + (p.viewsCount || 0), 0);
@@ -190,11 +252,15 @@ export const DashboardPage: React.FC = () => {
             </div>
 
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-lg sm:text-xl font-black text-white leading-tight uppercase">
                   {currentUser.name}
                 </h1>
                 <span className="text-xs text-cyan-300/80 font-mono">@{currentUser.username}</span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-mono text-emerald-300 font-bold uppercase tracking-wider">
+                  <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                  Private Route
+                </span>
               </div>
               <p className="text-xs text-cyan-100/75 line-clamp-1 max-w-md mt-0.5">
                 {currentUser.bio || 'Author & Creator • Personal Dashboard'}
@@ -203,7 +269,16 @@ export const DashboardPage: React.FC = () => {
           </div>
 
           {/* Action buttons */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => navigateTo('profile')}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-cyan-950/80 hover:bg-cyan-900 text-cyan-200 border border-cyan-500/30 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+              id="view-full-profile-btn"
+            >
+              <UserIcon className="w-3.5 h-3.5 text-cyan-400" />
+              <span>User Profile</span>
+            </button>
+
             <button
               onClick={() => {
                 setEditName(currentUser.name);
@@ -211,19 +286,29 @@ export const DashboardPage: React.FC = () => {
                 setEditAvatar(currentUser.avatar);
                 setShowEditProfileModal(true);
               }}
-              className="px-3.5 py-2 bg-cyan-950/80 hover:bg-cyan-900 text-cyan-200 border border-cyan-500/30 rounded-xl text-xs font-semibold transition-colors"
+              className="px-3.5 py-2 bg-cyan-950/60 hover:bg-cyan-900/80 text-cyan-300/90 border border-cyan-500/20 rounded-xl text-xs font-medium transition-colors cursor-pointer"
               id="edit-profile-btn"
             >
-              Edit Profile
+              Quick Edit
             </button>
 
             <button
               onClick={() => navigateTo('create')}
-              className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 rounded-xl text-xs font-black shadow-[0_0_15px_rgba(6,182,212,0.4)] transition-all hover:scale-105 active:scale-95"
+              className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 rounded-xl text-xs font-black shadow-[0_0_15px_rgba(6,182,212,0.4)] transition-all hover:scale-105 active:scale-95 cursor-pointer"
               id="dashboard-create-new-blog-btn"
             >
               <Plus className="w-4 h-4" />
               <span>NEW BLOG</span>
+            </button>
+
+            <button
+              onClick={openLogoutModal}
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 hover:text-rose-200 border border-rose-500/30 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+              id="dashboard-logout-btn"
+              title="Sign out of account"
+            >
+              <LogOut className="w-3.5 h-3.5 text-rose-400" />
+              <span className="hidden sm:inline">Sign Out</span>
             </button>
           </div>
         </div>
@@ -232,7 +317,7 @@ export const DashboardPage: React.FC = () => {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-cyan-500/20 text-center">
           <div className="cyber-glass rounded-2xl p-3 border border-cyan-500/30">
             <span className="text-[11px] font-bold text-cyan-300/80 uppercase">Total Articles</span>
-            <p className="text-xl sm:text-2xl font-black text-white leading-tight mt-0.5">{targetBlogs.length}</p>
+            <p className="text-xl sm:text-2xl font-black text-white leading-tight mt-0.5">{totalArticles}</p>
           </div>
 
           <div className="cyber-glass rounded-2xl p-3 border border-emerald-500/30">
@@ -252,53 +337,125 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
+      {/* JWT Authentication & Session Status Card */}
+      <div className="cyber-glass-glow rounded-3xl p-4 sm:p-5 border border-cyan-500/30 bg-[#07172b]/80 space-y-3" id="jwt-session-card">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-cyan-500/20 text-cyan-300 flex items-center justify-center border border-cyan-400/40">
+              <ShieldCheck className="w-5 h-5 text-cyan-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider">
+                  JWT Session Management
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  AUTHENTICATED
+                </span>
+                <span className="hidden sm:inline-block px-2 py-0.5 rounded-full text-[10px] font-mono text-cyan-300 bg-cyan-950/70 border border-cyan-500/30">
+                  HS256
+                </span>
+              </div>
+              <p className="text-[11px] text-cyan-200/70">
+                {sessionInfo?.expiresAt ? (
+                  <>Expires: <span className="text-white font-mono">{new Date(sessionInfo.expiresAt).toLocaleString()}</span></>
+                ) : (
+                  'Active session secured with JSON Web Token verification'
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowSessionDetails(!showSessionDetails)}
+              className="px-3 py-1.5 bg-cyan-950/70 hover:bg-cyan-900 text-cyan-200 text-xs font-semibold rounded-xl border border-cyan-500/30 transition-colors flex items-center gap-1.5"
+              id="view-session-details-btn"
+            >
+              <Key className="w-3.5 h-3.5 text-cyan-400" />
+              <span>{showSessionDetails ? 'Hide Token' : 'View Token'}</span>
+            </button>
+
+            <button
+              onClick={async () => {
+                setIsRefreshingToken(true);
+                await refreshSession();
+                setIsRefreshingToken(false);
+              }}
+              disabled={isRefreshingToken}
+              className="px-3 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-200 text-xs font-semibold rounded-xl border border-cyan-400/40 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+              id="refresh-session-token-btn"
+              title="Renews JWT token expiration for 7 days"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-cyan-300 ${isRefreshingToken ? 'animate-spin' : ''}`} />
+              <span>{isRefreshingToken ? 'Renewing...' : 'Renew Token'}</span>
+            </button>
+          </div>
+        </div>
+
+        {showSessionDetails && sessionInfo?.token && (
+          <div className="pt-3 border-t border-cyan-500/20 space-y-2">
+            <div className="flex items-center justify-between text-[11px] text-cyan-300">
+              <span className="font-mono">Bearer Token (Header Authorization)</span>
+              <button
+                onClick={() => {
+                  if (sessionInfo.token) {
+                    navigator.clipboard.writeText(sessionInfo.token);
+                    setCopiedToken(true);
+                    setTimeout(() => setCopiedToken(false), 2000);
+                  }
+                }}
+                className="text-xs text-cyan-300 hover:text-white flex items-center gap-1 font-sans"
+              >
+                {copiedToken ? (
+                  <>
+                    <Check className="w-3 h-3 text-emerald-400" />
+                    <span className="text-emerald-400">Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3 h-3" />
+                    <span>Copy Token</span>
+                  </>
+                )}
+              </button>
+            </div>
+            <div className="p-2.5 bg-slate-950/80 rounded-xl border border-cyan-500/30 font-mono text-[11px] text-cyan-100/80 break-all select-all">
+              {sessionInfo.token}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* 4. My Blogs Management Table & Container */}
       <div className="cyber-glass-glow rounded-3xl border border-cyan-400/40 overflow-hidden space-y-0">
         
         {/* Controls Bar */}
         <div className="p-4 sm:px-6 border-b border-cyan-500/20 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2.5">
-            {/* Scope Switcher: My Blogs vs All DB Blogs */}
-            <div className="flex items-center p-1 bg-cyan-950/90 rounded-xl border border-cyan-500/30 text-xs font-semibold">
-              <button
-                onClick={() => setScopeTab('my')}
-                className={`px-3 py-1 rounded-lg transition-colors flex items-center gap-1.5 ${
-                  scopeTab === 'my'
-                    ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
-                    : 'text-cyan-300 hover:text-white'
-                }`}
-                id="scope-my-blogs"
-              >
-                <UserIcon className="w-3.5 h-3.5" />
+            <div className="flex items-center gap-2">
+              <span className="text-xs sm:text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+                <FileText className="w-4 h-4 text-cyan-400" />
                 <span>My Articles</span>
-              </button>
-
-              <button
-                onClick={() => setScopeTab('all')}
-                className={`px-3 py-1 rounded-lg transition-colors flex items-center gap-1.5 ${
-                  scopeTab === 'all'
-                    ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
-                    : 'text-cyan-300 hover:text-white'
-                }`}
-                id="scope-all-db-blogs"
-              >
-                <Database className="w-3.5 h-3.5" />
-                <span>All Database Blogs ({posts.length})</span>
-              </button>
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 border border-cyan-500/40 text-[11px] font-mono text-cyan-300 font-bold">
+                {targetBlogs.length} {targetBlogs.length === 1 ? 'article' : 'articles'}
+              </span>
             </div>
 
             <button
               onClick={async () => {
                 await fetchBlogs();
-                showToast('success', `Retrieved and synchronized ${posts.length} database blogs`);
+                showToast('success', 'Synchronized your articles with the database');
               }}
               disabled={isLoadingPosts}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-lg bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-500/30 transition-colors disabled:opacity-50 cursor-pointer"
-              title="Refresh database entries from MongoDB"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-500/30 transition-colors disabled:opacity-50 cursor-pointer"
+              title="Refresh your articles from database"
               id="dashboard-sync-db-btn"
             >
               <RefreshCw className={`w-3 h-3 text-cyan-400 ${isLoadingPosts ? 'animate-spin' : ''}`} />
-              <span>{isLoadingPosts ? 'Syncing...' : 'Sync DB'}</span>
+              <span>{isLoadingPosts ? 'Syncing...' : 'Sync'}</span>
             </button>
           </div>
 
@@ -308,7 +465,7 @@ export const DashboardPage: React.FC = () => {
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-cyan-400" />
               <input
                 type="text"
-                placeholder={scopeTab === 'all' ? 'Search all blogs...' : 'Search my posts...'}
+                placeholder="Search my articles..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-8 pr-7 py-1.5 text-xs bg-cyan-950/70 text-white rounded-xl border border-cyan-500/30 focus:border-cyan-400 focus:outline-none placeholder:text-cyan-400/40"
@@ -358,7 +515,7 @@ export const DashboardPage: React.FC = () => {
                 }`}
                 id="tab-all-blogs"
               >
-                All
+                All ({targetBlogs.length})
               </button>
               <button
                 onClick={() => setFilterTab('published')}
@@ -367,7 +524,7 @@ export const DashboardPage: React.FC = () => {
                 }`}
                 id="tab-published-blogs"
               >
-                Published
+                Published ({totalPublished})
               </button>
               <button
                 onClick={() => setFilterTab('draft')}
@@ -376,7 +533,7 @@ export const DashboardPage: React.FC = () => {
                 }`}
                 id="tab-draft-blogs"
               >
-                Drafts
+                Drafts ({totalDrafts})
               </button>
             </div>
 
@@ -405,21 +562,21 @@ export const DashboardPage: React.FC = () => {
               </div>
               <div className="space-y-1">
                 <h3 className="text-base font-bold text-white uppercase">
-                  {targetBlogs.length === 0 ? 'No Articles Found' : 'No Matching Articles Found'}
+                  {targetBlogs.length === 0 ? 'No Articles Created Yet' : 'No Matching Articles Found'}
                 </h3>
                 <p className="text-xs text-cyan-200/70 max-w-sm mx-auto">
                   {targetBlogs.length === 0
-                    ? 'Start drafting your first blog post right now using the live markdown editor!'
+                    ? 'You have not published or drafted any articles yet. Start crafting your first blog post with live markdown editor!'
                     : 'Try changing your search query or switching tabs.'}
                 </p>
               </div>
               <button
                 onClick={() => navigateTo('create')}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 rounded-xl text-xs font-black shadow-[0_0_15px_rgba(6,182,212,0.4)]"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 rounded-xl text-xs font-black shadow-[0_0_15px_rgba(6,182,212,0.4)] hover:scale-105 transition-transform cursor-pointer"
                 id="empty-dashboard-create-btn"
               >
                 <Plus className="w-4 h-4" />
-                <span>STEP 5 · CREATE NEW BLOG</span>
+                <span>WRITE FIRST ARTICLE</span>
               </button>
             </div>
           ) : (

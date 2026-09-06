@@ -13,22 +13,19 @@ import {
   User,
   Sparkles,
   HelpCircle,
-  FolderGit2
+  FolderGit2,
+  ChevronDown
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
-  const { currentUser, activePage, navigateTo, logout, searchQuery, setSearchQuery } = useBlog();
+  const { currentUser, activePage, navigateTo, openLogoutModal, searchQuery, setSearchQuery } = useBlog();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showSearchInput, setShowSearchInput] = useState(false);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
 
-  const handleNavClick = (page: 'home' | 'login' | 'register' | 'dashboard' | 'create', sectionId?: string) => {
+  const handleNavClick = (page: 'home' | 'login' | 'register' | 'dashboard' | 'create' | 'profile', sectionId?: string) => {
     setMobileMenuOpen(false);
-    if (page === 'dashboard') {
-      if (!currentUser) {
-        navigateTo('login');
-        return;
-      }
-    }
+    setShowUserDropdown(false);
     navigateTo(page);
 
     if (sectionId) {
@@ -164,10 +161,14 @@ export const Navbar: React.FC = () => {
                 </button>
 
                 {/* User Dropdown / Profile pill */}
-                <div className="flex items-center gap-2 pl-2 ml-1 border-l border-cyan-500/20">
+                <div className="relative flex items-center gap-2 pl-2 ml-1 border-l border-cyan-500/20">
                   <button
-                    onClick={() => handleNavClick('dashboard')}
-                    className="flex items-center gap-2 p-1 pr-2 rounded-full hover:bg-cyan-950/50 transition-colors group border border-cyan-500/20"
+                    onClick={() => setShowUserDropdown((prev) => !prev)}
+                    className={`flex items-center gap-2 p-1 pr-2.5 rounded-full transition-all group border cursor-pointer ${
+                      activePage === 'profile'
+                        ? 'bg-cyan-500/20 border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
+                        : 'border-cyan-500/30 hover:bg-cyan-950/60'
+                    }`}
                     title={`Logged in as ${currentUser.name}`}
                     id="user-profile-menu-btn"
                   >
@@ -180,12 +181,74 @@ export const Navbar: React.FC = () => {
                     <span className="text-xs font-semibold text-cyan-100 group-hover:text-cyan-300 max-w-[90px] truncate">
                       {currentUser.name.split(' ')[0]}
                     </span>
+                    <ChevronDown className={`w-3 h-3 text-cyan-400 transition-transform ${showUserDropdown ? 'rotate-180' : ''}`} />
                   </button>
 
+                  {/* Dropdown Menu */}
+                  {showUserDropdown && (
+                    <div className="absolute right-0 top-full mt-2 w-56 py-2 bg-[#071326] border border-cyan-500/30 rounded-2xl shadow-[0_0_30px_rgba(6,182,212,0.25)] z-50 backdrop-blur-xl">
+                      <div className="px-4 py-2 border-b border-cyan-500/20">
+                        <p className="text-xs font-bold text-white truncate">{currentUser.name}</p>
+                        <p className="text-[11px] text-cyan-300/80 font-mono truncate">@{currentUser.username}</p>
+                      </div>
+
+                      <div className="py-1">
+                        <button
+                          onClick={() => handleNavClick('profile')}
+                          className={`w-full flex items-center gap-2.5 px-4 py-2 text-xs transition-colors text-left cursor-pointer ${
+                            activePage === 'profile'
+                              ? 'text-cyan-300 bg-cyan-500/20 font-bold'
+                              : 'text-cyan-200 hover:text-white hover:bg-cyan-950/70'
+                          }`}
+                          id="dropdown-profile-link"
+                        >
+                          <User className="w-3.5 h-3.5 text-cyan-400" />
+                          <span>My Profile</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleNavClick('dashboard')}
+                          className={`w-full flex items-center gap-2.5 px-4 py-2 text-xs transition-colors text-left cursor-pointer ${
+                            activePage === 'dashboard'
+                              ? 'text-cyan-300 bg-cyan-500/20 font-bold'
+                              : 'text-cyan-200 hover:text-white hover:bg-cyan-950/70'
+                          }`}
+                          id="dropdown-dashboard-link"
+                        >
+                          <LayoutDashboard className="w-3.5 h-3.5 text-cyan-400" />
+                          <span>Author Dashboard</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleNavClick('create')}
+                          className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-cyan-200 hover:text-white hover:bg-cyan-950/70 transition-colors text-left cursor-pointer"
+                          id="dropdown-create-link"
+                        >
+                          <PenSquare className="w-3.5 h-3.5 text-cyan-400" />
+                          <span>Create Blog</span>
+                        </button>
+                      </div>
+
+                      <div className="pt-1 border-t border-cyan-500/20">
+                        <button
+                          onClick={() => {
+                            setShowUserDropdown(false);
+                            openLogoutModal();
+                          }}
+                          className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 transition-colors text-left font-semibold cursor-pointer"
+                          id="dropdown-logout-btn"
+                        >
+                          <LogOut className="w-3.5 h-3.5" />
+                          <span>Sign Out</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <button
-                    onClick={logout}
+                    onClick={openLogoutModal}
                     title="Log out"
-                    className="p-1.5 text-cyan-300/70 hover:text-rose-400 hover:bg-rose-950/30 rounded-lg transition-colors"
+                    className="p-1.5 text-cyan-300/70 hover:text-rose-400 hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer"
                     id="logout-btn"
                   >
                     <LogOut className="w-3.5 h-3.5" />
@@ -296,7 +359,11 @@ export const Navbar: React.FC = () => {
         {mobileMenuOpen && (
           <div className="md:hidden py-4 border-t border-cyan-500/20 space-y-2 bg-[#08172e] rounded-b-2xl p-3 border-b border-cyan-500/30" id="mobile-nav-panel">
             {currentUser && (
-              <div className="flex items-center gap-3 p-3 bg-cyan-950/80 rounded-xl mb-3 border border-cyan-500/20">
+              <button
+                onClick={() => handleNavClick('profile')}
+                className="w-full flex items-center gap-3 p-3 bg-cyan-950/80 hover:bg-cyan-900/80 rounded-xl mb-3 border border-cyan-500/30 text-left transition-colors cursor-pointer"
+                id="mobile-user-profile-header"
+              >
                 <img
                   src={currentUser.avatar}
                   alt={currentUser.name}
@@ -305,9 +372,12 @@ export const Navbar: React.FC = () => {
                 />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-bold text-white truncate">{currentUser.name}</p>
-                  <p className="text-[11px] text-cyan-300 truncate">@{currentUser.username}</p>
+                  <p className="text-[11px] text-cyan-300 truncate font-mono">@{currentUser.username}</p>
                 </div>
-              </div>
+                <span className="text-[10px] font-bold text-cyan-400 bg-cyan-500/20 px-2 py-0.5 rounded-full">
+                  Profile →
+                </span>
+              </button>
             )}
 
             <button
@@ -340,9 +410,20 @@ export const Navbar: React.FC = () => {
             {currentUser ? (
               <>
                 <button
+                  onClick={() => handleNavClick('profile')}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                    activePage === 'profile' ? 'bg-cyan-500/20 text-cyan-300 font-bold' : 'text-slate-300 hover:bg-cyan-950/60'
+                  }`}
+                  id="mobile-nav-profile"
+                >
+                  <User className="w-4 h-4 text-cyan-400" />
+                  <span>My Profile</span>
+                </button>
+
+                <button
                   onClick={() => handleNavClick('dashboard')}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold ${
-                    activePage === 'dashboard' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-300 hover:bg-cyan-950/60'
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                    activePage === 'dashboard' ? 'bg-cyan-500/20 text-cyan-300 font-bold' : 'text-slate-300 hover:bg-cyan-950/60'
                   }`}
                   id="mobile-nav-dashboard"
                 >
@@ -362,9 +443,9 @@ export const Navbar: React.FC = () => {
                 <button
                   onClick={() => {
                     setMobileMenuOpen(false);
-                    logout();
+                    openLogoutModal();
                   }}
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-rose-400 hover:bg-rose-950/30"
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-rose-400 hover:bg-rose-950/30 transition-colors cursor-pointer"
                   id="mobile-nav-logout"
                 >
                   <LogOut className="w-4 h-4" />
